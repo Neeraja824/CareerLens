@@ -9,10 +9,12 @@ const resumeUploadsDirectory = path.resolve(process.cwd(), 'uploads', 'resumes')
 
 fs.mkdirSync(resumeUploadsDirectory, { recursive: true })
 
-try {
-  await connectDatabase()
-  app.listen(port, () => console.log(`CareerLens AI backend listening on http://localhost:${port}`))
-} catch (error) {
-  console.error('Unable to start backend:', error.message)
-  process.exit(1)
-}
+const databaseConnected = await connectDatabase()
+
+app.listen(port, () => {
+  if (databaseConnected) {
+    console.log(`CareerLens AI backend listening on http://localhost:${port}`)
+  } else {
+    console.warn(`CareerLens AI backend listening on http://localhost:${port} without MongoDB connection. Authentication and resume flows will fail until MongoDB Atlas is reachable.`)
+  }
+})

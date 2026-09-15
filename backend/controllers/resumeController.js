@@ -8,6 +8,19 @@ const allowedTypes = {
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
 }
 
+export const supportedResumeTypes = Object.keys(allowedTypes)
+
+export function isSupportedResumeType(fileType = '', fileName = '') {
+  if (allowedTypes[fileType]) {
+    return true
+  }
+
+  const normalizedType = String(fileType || '').toLowerCase()
+  const extension = path.extname(fileName || '').toLowerCase().slice(1)
+
+  return ['pdf', 'doc', 'docx'].includes(normalizedType) || ['pdf', 'doc', 'docx'].includes(extension)
+}
+
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:8000'
 
 const safeFileType = (fileType, fileName = '') => {

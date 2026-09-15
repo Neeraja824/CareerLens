@@ -7,7 +7,16 @@ export async function connectDatabase() {
     return false
   }
 
-  await mongoose.connect(MONGODB_URI)
-  console.log('MongoDB connected')
-  return true
+  try {
+    await mongoose.connect(MONGODB_URI, {
+      serverSelectionTimeoutMS: 10000,
+      family: 4,
+    })
+    console.log('MongoDB connected')
+    return true
+  } catch (error) {
+    const sanitizedMessage = String(error?.message || '').replace(/(:\/\/)([^:@]+)(:)([^@]+)(@)/, '$1$2$3[REDACTED]$5')
+    console.error('MongoDB connection failed:', sanitizedMessage || 'Unknown database error')
+    return false
+  }
 }

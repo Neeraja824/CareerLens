@@ -28,9 +28,15 @@ const storage = multer.diskStorage({
 })
 
 const fileFilter = (_request, file, callback) => {
-  const allowedTypes = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']
+  const allowedTypes = [
+    'application/pdf',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  ]
+  const normalizedName = (file.originalname || '').toLowerCase()
+  const isAllowedByExtension = normalizedName.endsWith('.pdf') || normalizedName.endsWith('.doc') || normalizedName.endsWith('.docx')
 
-  if (allowedTypes.includes(file.mimetype)) {
+  if (allowedTypes.includes(file.mimetype) || isAllowedByExtension) {
     callback(null, true)
     return
   }

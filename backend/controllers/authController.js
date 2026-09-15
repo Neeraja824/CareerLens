@@ -1,5 +1,6 @@
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
+import mongoose from 'mongoose'
 import Student from '../models/student.model.js'
 import { validateLoginInput, validateRegistrationInput } from '../utils/authValidation.js'
 
@@ -14,6 +15,13 @@ function buildStudentPayload(student) {
 
 export async function registerStudent(request, response) {
   try {
+    if (mongoose.connection.readyState !== 1) {
+      return response.status(503).json({
+        success: false,
+        message: 'Database unavailable. Please try again later.',
+      })
+    }
+
     const payload = {
       fullName: request.body.fullName,
       studentId: request.body.studentId,
@@ -99,6 +107,13 @@ export async function registerStudent(request, response) {
 
 export async function loginStudent(request, response) {
   try {
+    if (mongoose.connection.readyState !== 1) {
+      return response.status(503).json({
+        success: false,
+        message: 'Database unavailable. Please try again later.',
+      })
+    }
+
     const { email, password } = request.body
     const { isValid, errors } = validateLoginInput({ email, password })
 
