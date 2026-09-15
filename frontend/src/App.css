@@ -57,6 +57,20 @@ button { cursor: pointer; }
 .resume-panel-body { display: flex; justify-content: space-between; gap: 20px; align-items: center; }
 .empty-state { padding: 18px; border-radius: 14px; background: #f8fbff; border: 1px solid var(--line); }
 .empty-state p { margin: 0; color: var(--muted); }
+.analysis-panel { display: grid; gap: 20px; }
+.analysis-status-text { margin: 0; color: var(--muted); font-size: 1rem; }
+.analysis-overview { display: flex; gap: 18px; align-items: stretch; }
+.score-card { flex: 1; background: linear-gradient(135deg, #edf4ff, #ffffff); border: 1px solid #d8e5ff; border-radius: 18px; padding: 22px; display: grid; gap: 6px; }
+.score-card span { color: var(--muted); font-weight: 700; }
+.score-card strong { font-size: clamp(2rem, 4vw, 3rem); letter-spacing: -0.06em; }
+.analysis-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.analysis-card { background: #f8fbff; border: 1px solid var(--line); border-radius: 16px; padding: 18px; }
+.analysis-card h3 { margin: 0 0 12px; font-size: 1rem; }
+.analysis-card.full-width { grid-column: 1 / -1; }
+.analysis-list { margin: 0; padding-left: 1.1rem; display: grid; gap: 8px; color: var(--navy); }
+.analysis-list li::marker { color: var(--blue); }
+.analysis-summary { margin: 0; line-height: 1.7; color: var(--navy); }
+.empty-list-text { margin: 0; color: var(--muted); }
 .error-banner { padding: 12px 14px; border-radius: 12px; border: 1px solid rgba(209, 67, 67, 0.18); background: rgba(209, 67, 67, 0.08); color: var(--danger); font-weight: 700; }
 .success-banner { padding: 12px 14px; border-radius: 12px; border: 1px solid rgba(29, 143, 102, 0.2); background: rgba(29, 143, 102, 0.08); color: var(--success); font-weight: 700; }
 .password-input-wrap { position: relative; }

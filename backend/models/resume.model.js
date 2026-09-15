@@ -40,11 +40,59 @@ const resumeSchema = new mongoose.Schema(
     status: {
       type: String,
       default: 'uploaded',
-      enum: ['uploaded', 'replaced', 'pending-analysis'],
+      enum: ['uploaded', 'replaced', 'pending-analysis', 'analysis-ready'],
     },
     isCurrent: {
       type: Boolean,
       default: true,
+    },
+    extractedText: {
+      type: String,
+      default: '',
+    },
+    resumeScore: {
+      type: Number,
+      default: null,
+    },
+    skills: {
+      type: [String],
+      default: [],
+    },
+    missingSkills: {
+      type: [String],
+      default: [],
+    },
+    strengths: {
+      type: [String],
+      default: [],
+    },
+    improvements: {
+      type: [String],
+      default: [],
+    },
+    education: {
+      type: [String],
+      default: [],
+    },
+    projects: {
+      type: [String],
+      default: [],
+    },
+    certifications: {
+      type: [String],
+      default: [],
+    },
+    experience: {
+      type: [String],
+      default: [],
+    },
+    summary: {
+      type: String,
+      default: '',
+    },
+    analysisCompletedAt: {
+      type: Date,
+      default: null,
     },
   },
   {

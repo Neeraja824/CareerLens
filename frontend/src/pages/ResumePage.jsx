@@ -1,7 +1,19 @@
-import { useEffect, useState } from 'react'
+﻿import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import api from '../services/api.js'
 import { useAuth } from '../context/AuthContext.jsx'
+
+const formatFileSize = (bytes = 0) => {
+  if (bytes < 1024) {
+    return `${bytes} B`
+  }
+
+  if (bytes < 1024 * 1024) {
+    return `${(bytes / 1024).toFixed(1)} KB`
+  }
+
+  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
+}
 
 function ResumePage() {
   const { user, logout, token } = useAuth()
@@ -39,6 +51,33 @@ function ResumePage() {
     fetchResumes()
   }, [token])
 
+  const analysisResult = useMemo(() => {
+    if (!currentResume) {
+      return null
+    }
+
+    const hasAnalysis = currentResume.resumeScore !== null
+      || (currentResume.skills && currentResume.skills.length > 0)
+      || (currentResume.summary && currentResume.summary.length > 0)
+
+    if (!hasAnalysis) {
+      return null
+    }
+
+    return {
+      resumeScore: currentResume.resumeScore ?? 0,
+      skills: currentResume.skills || [],
+      missingSkills: currentResume.missingSkills || [],
+      strengths: currentResume.strengths || [],
+      improvements: currentResume.improvements || [],
+      education: currentResume.education || [],
+      projects: currentResume.projects || [],
+      certifications: currentResume.certifications || [],
+      experience: currentResume.experience || [],
+      summary: currentResume.summary || '',
+    }
+  }, [currentResume])
+
   const validateFile = (file) => {
     if (!file) {
       return 'Please upload a PDF or DOCX file.'
@@ -46,6 +85,7 @@ function ResumePage() {
 
     const allowedTypes = [
       'application/pdf',
+      'application/msword',
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     ]
 
@@ -70,6 +110,7 @@ function ResumePage() {
   const refreshResumes = async () => {
     const response = await api.get('/resumes/me')
     const nextResumes = Array.isArray(response.data.resumes) ? response.data.resumes : []
+
     setResumes(nextResumes)
     setCurrentResume(nextResumes.find((resume) => resume.isCurrent) || nextResumes[0] || null)
   }
@@ -102,25 +143,23 @@ function ResumePage() {
 
     setIsSubmitting(true)
     setErrorMessage('')
-    setSuccessMessage('')
+    setSuccessMessage('Analyzing your resume...')
 
     try {
+      let response
+
       if (resumeToReplaceId) {
-        await api.put(`/resumes/${resumeToReplaceId}`, formData, {
+        response = await api.put(`/resumes/${resumeToReplaceId}`, formData, {
           headers: { 'Content-Type': 'multipart/form-data' },
         })
       } else {
-        await api.post('/resumes/upload', formData, {
+        response = await api.post('/resumes/upload', formData, {
           headers: { 'Content-Type': 'multipart/form-data' },
         })
       }
 
       await refreshResumes()
-      setSuccessMessage(
-        resumeToReplaceId
-          ? 'Resume updated successfully.'
-          : 'Resume uploaded successfully. AI analysis will be available after analysis is completed.',
-      )
+      setSuccessMessage(response?.data?.message || 'Resume analyzed successfully.')
       setSelectedFile(null)
       setResumeToReplaceId(null)
       clearFileInput()
@@ -160,8 +199,22 @@ function ResumePage() {
   const handleReplaceRequest = (resumeId) => {
     setResumeToReplaceId(resumeId)
     setErrorMessage('')
-    setSuccessMessage('Select a replacement file and click Upload Resume.')
+    setSuccessMessage('Select a replacement file and click Analyze Resume.')
     document.getElementById('resume-upload-input')?.click()
+  }
+
+  const renderChecklist = (items = []) => {
+    if (!items.length) {
+      return <p className="empty-list-text">No items found.</p>
+    }
+
+    return (
+      <ul className="analysis-list">
+        {items.map((item) => (
+          <li key={item}>{item}</li>
+        ))}
+      </ul>
+    )
   }
 
   if (isLoading) {
@@ -178,7 +231,7 @@ function ResumePage() {
         <nav className="sidebar-nav">
           <Link className="nav-item" to="/dashboard">Dashboard</Link>
           <Link className="nav-item" to="/profile">Profile</Link>
-          <Link className="nav-item active" to="/resume">My Resume</Link>
+          <Link className="nav-item active" to="/resume">Resume Analyzer</Link>
           <Link className="nav-item" to="/jobs">Jobs</Link>
           <Link className="nav-item" to="/applications">Applications</Link>
         </nav>
@@ -192,8 +245,8 @@ function ResumePage() {
       <main className="dashboard-main">
         <header className="dashboard-header profile-header">
           <div>
-            <p className="eyebrow">My Resume</p>
-            <h1>Resume Management</h1>
+            <p className="eyebrow">Resume Analyzer</p>
+            <h1>Resume Analysis</h1>
           </div>
         </header>
 
@@ -207,16 +260,16 @@ function ResumePage() {
             <input
               id="resume-upload-input"
               type="file"
-              accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+              accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
               onChange={handleFileChange}
             />
             <div className="upload-content">
               <p className="upload-title">Drag and drop or choose a file</p>
-              <p className="upload-subtitle">Supported formats: PDF, DOCX • Maximum size: 5 MB</p>
+              <p className="upload-subtitle">Supported formats: PDF, DOC, DOCX • Maximum size: 5 MB</p>
               {selectedFile ? (
                 <div className="selected-file-box">
                   <p><strong>Selected file:</strong> {selectedFile.name}</p>
-                  <p><strong>File size:</strong> {(selectedFile.size / 1024).toFixed(1)} KB</p>
+                  <p><strong>File size:</strong> {formatFileSize(selectedFile.size)}</p>
                 </div>
               ) : null}
             </div>
@@ -224,7 +277,7 @@ function ResumePage() {
 
           <div className="resume-actions-row">
             <button type="button" className="primary-button" onClick={handleSubmit} disabled={isSubmitting}>
-              {isSubmitting ? 'Uploading...' : 'Upload Resume'}
+              {isSubmitting ? 'Analyzing...' : 'Analyze Resume'}
             </button>
             <button
               type="button"
@@ -241,10 +294,88 @@ function ResumePage() {
           </div>
         </section>
 
+        {currentResume && currentResume.status === 'pending-analysis' && (
+          <section className="profile-panel analysis-panel">
+            <h2>Analysis Status</h2>
+            <p className="analysis-status-text">
+              Your resume has been uploaded and is waiting for AI analysis. Please try again in a moment.
+            </p>
+          </section>
+        )}
+
+        {analysisResult && (
+          <section className="profile-panel analysis-panel">
+            <div className="resume-header-row">
+              <h2>Resume Analysis</h2>
+              <button type="button" className="secondary-button small-button" onClick={() => setSelectedFile(null)}>
+                Analyze Another Resume
+              </button>
+            </div>
+
+            <div className="analysis-overview">
+              <div className="score-card">
+                <span>Resume Score</span>
+                <strong>{analysisResult.resumeScore}/100</strong>
+              </div>
+            </div>
+
+            <div className="analysis-grid">
+              <div className="analysis-card">
+                <h3>Skills Found</h3>
+                {renderChecklist(analysisResult.skills)}
+              </div>
+
+              <div className="analysis-card">
+                <h3>Missing / Recommended Skills</h3>
+                {renderChecklist(analysisResult.missingSkills)}
+              </div>
+
+              <div className="analysis-card">
+                <h3>Resume Strengths</h3>
+                {renderChecklist(analysisResult.strengths)}
+              </div>
+
+              <div className="analysis-card">
+                <h3>Areas to Improve</h3>
+                {renderChecklist(analysisResult.improvements)}
+              </div>
+
+              <div className="analysis-card full-width">
+                <h3>Profile Summary</h3>
+                <p className="analysis-summary">{analysisResult.summary}</p>
+              </div>
+
+              <div className="analysis-card">
+                <h3>Education</h3>
+                {renderChecklist(analysisResult.education)}
+              </div>
+
+              <div className="analysis-card">
+                <h3>Projects</h3>
+                {renderChecklist(analysisResult.projects)}
+              </div>
+
+              <div className="analysis-card">
+                <h3>Certifications</h3>
+                {renderChecklist(analysisResult.certifications)}
+              </div>
+
+              <div className="analysis-card">
+                <h3>Experience / Internships</h3>
+                {renderChecklist(analysisResult.experience)}
+              </div>
+            </div>
+          </section>
+        )}
+
         <section className="profile-panel resume-list-panel">
           <div className="resume-header-row">
             <h2>My Resumes</h2>
-            {currentResume && <div className="resume-badge">Status: {currentResume.status === 'uploaded' ? 'Ready for Analysis' : currentResume.status}</div>}
+            {currentResume && (
+              <div className="resume-badge">
+                Status: {currentResume.status === 'analysis-ready' ? 'Ready for Analysis' : currentResume.status}
+              </div>
+            )}
           </div>
 
           {resumes.length === 0 ? (
@@ -258,11 +389,14 @@ function ResumePage() {
                   <div>
                     <p className="resume-name">{resume.originalFileName}</p>
                     <p className="resume-meta">
-                      {resume.fileType.toUpperCase()} • {(resume.fileSize / 1024).toFixed(1)} KB
+                      {resume.fileType.toUpperCase()} • {formatFileSize(resume.fileSize)}
                     </p>
                     <p className="resume-meta">
                       Uploaded: {new Date(resume.uploadDate).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}
                     </p>
+                    {resume.resumeScore !== null && resume.resumeScore !== undefined && (
+                      <p className="resume-meta">Resume score: {resume.resumeScore}/100</p>
+                    )}
                   </div>
 
                   <div className="resume-item-actions">
