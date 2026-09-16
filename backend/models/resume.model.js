@@ -97,6 +97,7 @@ const resumeSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
+    collection: 'resumes',
   },
 )
 
