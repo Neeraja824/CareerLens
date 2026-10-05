@@ -5,7 +5,10 @@ import resumeRoutes from './routes/resumeRoutes.js'
 import studentRoutes from './routes/studentRoutes.js'
 
 const app = express()
-const allowedOrigins = ['http://localhost:8080']
+const allowedOrigins = [
+  'http://localhost:8080',
+  process.env.FRONTEND_URL?.replace(/\/+$/, ''),
+].filter(Boolean)
 const corsOptions = {
   origin: (origin, callback) => {
     if (!origin || allowedOrigins.includes(origin)) return callback(null, true)
