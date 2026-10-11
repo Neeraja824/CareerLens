@@ -75,10 +75,11 @@ uvicorn main:app --reload --port 8000
 ## Environment Variables
 
 - `frontend/.env.example`: `VITE_API_URL=http://localhost:5000/api`
-- `backend/.env.example`: `PORT`, `MONGODB_URI`, `JWT_SECRET`, and `FRONTEND_URL`
+- `backend/.env.example`: `PORT`, `MONGODB_URI`, `JWT_SECRET`, `FRONTEND_URL`, and `AI_SERVICE_URL`
 - `ai-service/.env.example`: `PORT=8000`
 
 Real `.env` files are ignored by Git. Never expose MongoDB credentials or future secrets in frontend code.
+The backend defaults `AI_SERVICE_URL` to `http://localhost:8000` for local development; configure it to the deployed AI service URL in the production backend environment.
 
 ## Health Checks
 

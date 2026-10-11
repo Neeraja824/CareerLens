@@ -1,4 +1,5 @@
 import io
+import logging
 import os
 import re
 import zipfile
@@ -14,6 +15,11 @@ except Exception:  # pragma: no cover
 
 load_dotenv()
 app = FastAPI(title='CareerLens AI Service', version='0.1.0')
+logger = logging.getLogger(__name__)
+
+
+class TextExtractionError(Exception):
+    pass
 
 TECH_SKILL_LIBRARY = {
     'programming_languages': ['python', 'java', 'javascript', 'typescript', 'c++', 'c#', 'php', 'ruby', 'swift', 'kotlin', 'sql', 'bash', 'powershell'],
@@ -41,7 +47,7 @@ def clean_text(text):
 
 def extract_text_from_pdf(file_bytes):
     if PdfReader is None:
-        return ''
+        raise TextExtractionError('PDF text extraction is unavailable.')
 
     try:
         reader = PdfReader(io.BytesIO(file_bytes))
@@ -50,8 +56,8 @@ def extract_text_from_pdf(file_bytes):
             text = page.extract_text() or ''
             pages.append(text)
         return '\n'.join(pages)
-    except Exception:
-        return ''
+    except Exception as error:
+        raise TextExtractionError('The PDF file could not be read.') from error
 
 
 def extract_text_from_docx(file_bytes):
@@ -65,8 +71,8 @@ def extract_text_from_docx(file_bytes):
             if element.text:
                 paragraphs.append(element.text)
         return '\n'.join(paragraphs)
-    except Exception:
-        return ''
+    except Exception as error:
+        raise TextExtractionError('The DOCX file could not be read.') from error
 
 
 def extract_text_from_uploaded_file(file_bytes, filename):
@@ -225,42 +231,57 @@ async def analyze_resume(resume: UploadFile = File(...)):
     if not any(file_name.endswith(extension) for extension in allowed_extensions):
         raise HTTPException(status_code=400, detail='Please upload a PDF or DOCX file.')
 
-    file_bytes = await resume.read()
-    if not file_bytes or len(file_bytes) == 0:
-        raise HTTPException(status_code=400, detail='Uploaded resume is empty. Please upload a valid file.')
+    try:
+        file_bytes = await resume.read()
+        if not file_bytes:
+            raise HTTPException(status_code=400, detail='Uploaded resume is empty. Please upload a valid file.')
 
-    extracted_text = extract_text_from_uploaded_file(file_bytes, resume.filename)
-    cleaned_text = clean_text(extracted_text)
+        try:
+            extracted_text = extract_text_from_uploaded_file(file_bytes, resume.filename)
+        except TextExtractionError as error:
+            logger.warning('Resume text extraction failed: %s', error)
+            raise HTTPException(
+                status_code=400,
+                detail='Unable to extract text from the uploaded resume. Please ensure the file is valid.',
+            ) from error
 
-    if not cleaned_text:
-        raise HTTPException(status_code=400, detail='Unable to extract meaningful text from the uploaded resume.')
+        cleaned_text = clean_text(extracted_text)
+        if not cleaned_text:
+            raise HTTPException(status_code=400, detail='No readable text was found in the uploaded resume.')
 
-    skills = detect_skills(cleaned_text)
-    sections = extract_profile_sections(cleaned_text)
-    missing_skills = [skill for skill in RECOMMENDED_SKILLS if skill.lower() not in ' '.join(skills).lower()][:5]
+        skills = detect_skills(cleaned_text)
+        sections = extract_profile_sections(cleaned_text)
+        missing_skills = [skill for skill in RECOMMENDED_SKILLS if skill.lower() not in ' '.join(skills).lower()][:5]
 
-    analysis = {
-        'extractedText': cleaned_text,
-        'resumeScore': calculate_resume_score(
-            skills,
-            sections['projects'],
-            sections['certifications'],
-            sections['experience'],
-            sections['education'],
-            cleaned_text,
-        ),
-        'skills': skills,
-        'missingSkills': missing_skills,
-        'strengths': build_strengths(skills, sections['projects'], sections['certifications'], sections['experience'], sections['education']),
-        'improvements': build_improvements(skills, missing_skills, sections['projects'], sections['certifications'], sections['experience']),
-        'education': sections['education'],
-        'projects': sections['projects'],
-        'certifications': sections['certifications'],
-        'experience': sections['experience'],
-        'summary': build_summary(skills, sections['education'], sections['projects'], sections['certifications'], sections['experience']),
-    }
-
-    return analysis
+        analysis = {
+            'extractedText': cleaned_text,
+            'resumeScore': calculate_resume_score(
+                skills,
+                sections['projects'],
+                sections['certifications'],
+                sections['experience'],
+                sections['education'],
+                cleaned_text,
+            ),
+            'skills': skills,
+            'missingSkills': missing_skills,
+            'strengths': build_strengths(skills, sections['projects'], sections['certifications'], sections['experience'], sections['education']),
+            'improvements': build_improvements(skills, missing_skills, sections['projects'], sections['certifications'], sections['experience']),
+            'education': sections['education'],
+            'projects': sections['projects'],
+            'certifications': sections['certifications'],
+            'experience': sections['experience'],
+            'summary': build_summary(skills, sections['education'], sections['projects'], sections['certifications'], sections['experience']),
+        }
+        return analysis
+    except HTTPException:
+        raise
+    except Exception as error:
+        logger.exception('Unexpected resume analysis failure')
+        raise HTTPException(
+            status_code=500,
+            detail='Resume analysis failed due to an internal service error.',
+        ) from error
 
 
 if __name__ == '__main__':

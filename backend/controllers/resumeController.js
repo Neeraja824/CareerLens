@@ -65,29 +65,44 @@ function buildResumePayload(resume) {
   }
 }
 
-async function analyzeResumeWithAi(resume) {
+async function analyzeResumeWithAi(resume, originalMimeType) {
   const fileBuffer = fs.readFileSync(resume.storagePath)
 
-  const mimeType = resume.fileType === 'pdf'
+  const inferredMimeType = resume.fileType === 'pdf'
     ? 'application/pdf'
     : resume.fileType === 'docx'
       ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
       : 'application/msword'
 
   const formData = new FormData()
-  formData.append('resume', new Blob([fileBuffer], { type: mimeType }), resume.originalFileName)
+  formData.append('resume', new Blob([fileBuffer], { type: originalMimeType || inferredMimeType }), resume.originalFileName)
 
-  const response = await fetch(`${AI_SERVICE_URL}/analyze-resume`, {
-    method: 'POST',
-    body: formData,
-  })
+  let response
+  try {
+    response = await fetch(`${AI_SERVICE_URL}/analyze-resume`, {
+      method: 'POST',
+      body: formData,
+      signal: AbortSignal.timeout(30_000),
+    })
+  } catch (error) {
+    const errorCode = error?.cause?.code
+    const message = error?.name === 'TimeoutError'
+      ? 'AI service request timed out after 30 seconds.'
+      : `AI service request failed${errorCode ? ` (${errorCode})` : ''}.`
+    throw new Error(message)
+  }
 
   if (!response.ok) {
     const errorPayload = await response.json().catch(() => ({
-      message: 'Resume analysis failed. Please try again later.',
+      detail: 'The AI service returned an unreadable error response.',
     }))
 
-    throw new Error(errorPayload.message || 'Resume analysis failed. Please try again later.')
+    const serviceDetail = typeof errorPayload?.detail === 'string'
+      ? errorPayload.detail
+      : typeof errorPayload?.message === 'string'
+        ? errorPayload.message
+        : 'No error detail was provided.'
+    throw new Error(`AI service returned HTTP ${response.status}: ${serviceDetail.slice(0, 500)}`)
   }
 
   return response.json()
@@ -156,7 +171,7 @@ export async function uploadResume(request, response) {
     let analysisResult = null
 
     try {
-      analysisResult = await analyzeResumeWithAi(resume)
+      analysisResult = await analyzeResumeWithAi(resume, request.file.mimetype)
       await applyAnalysisToResume(resume, analysisResult)
     } catch (analysisError) {
       resume.status = 'pending-analysis'
@@ -344,7 +359,7 @@ export async function replaceResume(request, response) {
     let analysisResult = null
 
     try {
-      analysisResult = await analyzeResumeWithAi(resume)
+      analysisResult = await analyzeResumeWithAi(resume, request.file.mimetype)
       await applyAnalysisToResume(resume, analysisResult)
     } catch (analysisError) {
       resume.status = 'pending-analysis'
