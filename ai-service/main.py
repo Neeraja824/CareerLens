@@ -147,6 +147,7 @@ SECTION_ALIASES = {
         'academic projects',
         'personal projects',
         'key projects',
+        'selected projects',
     ),
     'technicalSkills': (
         'technical skills',
@@ -169,9 +170,12 @@ SECTION_ALIASES = {
         'professional experience',
         'employment history',
         'work history',
+        'career history',
         'internships',
         'internship',
         'internship experience',
+        'experience internships',
+        'professional experience internships',
     ),
     'achievements': (
         'achievements',
@@ -205,16 +209,27 @@ NORMALIZED_SECTION_ALIASES = {
     for alias in aliases
 }
 
+SECTION_HEADING_PATTERN = re.compile(
+    r'(?<![a-z0-9])(?P<label>'
+    + '|'.join(
+        '[\\s/&|-]+'.join(re.escape(token) for token in normalize_heading(alias).split())
+        for alias in sorted(NORMALIZED_SECTION_ALIASES, key=len, reverse=True)
+    )
+    + r')(?P<separator>\s*:\s*|\s*[-\u2013\u2014]\s*)',
+    re.IGNORECASE,
+)
+
 
 def detect_section_heading(line):
     candidate = re.sub(r'^[\s•·▪◦\-*#\d.)]+', '', line).strip()
     if not candidate:
         return None, ''
 
-    label, separator, remainder = candidate.partition(':')
-    section = NORMALIZED_SECTION_ALIASES.get(normalize_heading(label))
-    if section:
-        return section, remainder.strip()
+    match = SECTION_HEADING_PATTERN.match(candidate)
+    if match:
+        section = NORMALIZED_SECTION_ALIASES.get(normalize_heading(match.group('label')))
+        if section:
+            return section, candidate[match.end():].strip()
 
     section = NORMALIZED_SECTION_ALIASES.get(normalize_heading(candidate))
     if section:
@@ -230,6 +245,22 @@ def extract_profile_sections(text):
     for line in text.splitlines():
         clean_line = normalize_space(line)
         if not clean_line:
+            continue
+
+        candidate = re.sub(r'^[\s•·▪◦\-*#\d.)]+', '', clean_line).strip()
+        heading_matches = list(SECTION_HEADING_PATTERN.finditer(candidate))
+        if heading_matches:
+            prefix = candidate[:heading_matches[0].start()].strip()
+            if prefix and current_section:
+                sections[current_section].append(prefix)
+
+            for index, match in enumerate(heading_matches):
+                section = NORMALIZED_SECTION_ALIASES[normalize_heading(match.group('label'))]
+                current_section = section
+                content_end = heading_matches[index + 1].start() if index + 1 < len(heading_matches) else len(candidate)
+                inline_content = candidate[match.end():content_end].strip(' \t|')
+                if inline_content:
+                    sections[current_section].append(inline_content)
             continue
 
         heading, inline_content = detect_section_heading(clean_line)
@@ -309,18 +340,18 @@ def build_summary(skills, education, projects, certifications, experience, resum
     parts = []
 
     if skills:
-        parts.append(f"The candidate demonstrates strong skills in {', '.join(skills[:6])}.")
+        parts.append(f"Skills listed include {', '.join(skills[:6])}.")
     if education:
-        parts.append('The resume includes academic background information.')
+        parts.append(f"Education includes {education[0]}.")
     if projects:
-        parts.append('Project work is mentioned, suggesting practical implementation experience.')
+        parts.append(f"Project work includes {projects[0]}.")
     if certifications:
-        parts.append('Relevant certifications are highlighted, adding credibility to the profile.')
+        parts.append(f"Certifications include {certifications[0]}.")
     if experience:
-        parts.append('Internship or work experience is present, indicating applied exposure to real-world work.')
+        parts.append(f"Experience includes {experience[0]}.")
 
     if not parts:
-        return 'The uploaded resume provides limited structured information, so adding a clearer skills section, projects, and academic details would improve the profile.'
+        return ''
 
     return ' '.join(parts)
 

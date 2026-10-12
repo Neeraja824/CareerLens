@@ -113,6 +113,46 @@ class ResumeAnalysisTests(unittest.TestCase):
         self.assertNotIn('Alex Example', str(sections))
         self.assertNotIn('alex@example.test', str(sections))
 
+    def test_flattened_text_with_heading_variations_is_split_into_sections(self):
+        resume_text = (
+            'Alex Example | ACADEMIC BACKGROUND: BSc Computer Science, North College, 2022-2026 '
+            '| Selected Projects: Campus Planner built with Python '
+            '| Technical Skills: Python, React '
+            '| Licenses & Certifications: Cloud Fundamentals, 2025 '
+            '| Experience / Internships: Software Intern at Example Labs '
+            '| Awards and Honors: First place, campus hackathon '
+            '| Languages: English, Spanish'
+        )
+
+        sections = extract_profile_sections(resume_text)
+
+        self.assertEqual(sections['education'], ['BSc Computer Science, North College, 2022-2026'])
+        self.assertEqual(sections['projects'], ['Campus Planner built with Python'])
+        self.assertEqual(sections['technicalSkills'], ['Python, React'])
+        self.assertEqual(sections['certifications'], ['Cloud Fundamentals, 2025'])
+        self.assertEqual(sections['experience'], ['Software Intern at Example Labs'])
+        self.assertEqual(sections['achievements'], ['First place, campus hackathon'])
+        self.assertEqual(sections['languages'], ['English, Spanish'])
+
+    def test_multiple_projects_and_certifications_stay_in_their_sections(self):
+        resume_text = '\n'.join([
+            'PROJECTS:',
+            '- Campus Planner: Built a scheduling app.',
+            '- Budget Tracker: Created a personal finance tool.',
+            'CERTIFICATIONS:',
+            '- Cloud Fundamentals, 2025',
+            '- Python Developer Certificate, 2024',
+            'EXPERIENCE / INTERNSHIPS:',
+            '- Software Intern at Example Labs, Summer 2025',
+        ])
+
+        sections = extract_profile_sections(resume_text)
+
+        self.assertEqual(len(sections['projects']), 2)
+        self.assertEqual(len(sections['certifications']), 2)
+        self.assertEqual(sections['experience'], ['- Software Intern at Example Labs, Summer 2025'])
+        self.assertNotIn('Software Intern at Example Labs, Summer 2025', sections['certifications'])
+
     def test_missing_sections_remain_empty(self):
         resume_text = 'Morgan Sample\nContact: morgan@example.test\nTechnical Skills:\nPython'
         sections = extract_profile_sections(resume_text)
@@ -139,6 +179,9 @@ class ResumeAnalysisTests(unittest.TestCase):
         self.assertTrue(result['strengths'])
         self.assertTrue(result['improvements'])
         self.assertTrue(result['summary'])
+        self.assertIn('BSc Computer Science', result['summary'])
+        self.assertIn('Campus Planner', result['summary'])
+        self.assertIn('Software Intern', result['summary'])
         self.assertGreaterEqual(result['resumeScore'], 0)
         self.assertLessEqual(result['resumeScore'], 100)
 
@@ -170,6 +213,13 @@ class ResumeAnalysisTests(unittest.TestCase):
         self.assertEqual(result['certifications'], [])
         self.assertEqual(result['experience'], [])
         self.assertIn('python', [skill.lower() for skill in result['skills']])
+
+    def test_summary_is_empty_when_no_resume_facts_are_detected(self):
+        result = asyncio.run(
+            analyze_resume(UploadFile(filename='minimal.docx', file=io.BytesIO(build_docx(['Jordan Example']))))
+        )
+
+        self.assertEqual(result['summary'], '')
 
 
 if __name__ == '__main__':
