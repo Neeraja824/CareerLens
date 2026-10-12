@@ -37,6 +37,20 @@ const safeFileType = (fileType, fileName = '') => {
   return (fileType || '').toLowerCase()
 }
 
+export function buildSectionPayload(value, extractedText) {
+  const items = Array.isArray(value) ? value : []
+  const normalizedResume = String(extractedText || '').toLowerCase().replace(/\s+/g, ' ').trim()
+
+  return items.filter((item) => {
+    if (typeof item !== 'string' || !item.trim()) {
+      return false
+    }
+
+    return !normalizedResume
+      || item.toLowerCase().replace(/\s+/g, ' ').trim() !== normalizedResume
+  })
+}
+
 function buildResumePayload(resume) {
   return {
     id: resume._id.toString(),
@@ -54,10 +68,13 @@ function buildResumePayload(resume) {
     missingSkills: resume.missingSkills || [],
     strengths: resume.strengths || [],
     improvements: resume.improvements || [],
-    education: resume.education || [],
-    projects: resume.projects || [],
-    certifications: resume.certifications || [],
-    experience: resume.experience || [],
+    education: buildSectionPayload(resume.education, resume.extractedText),
+    projects: buildSectionPayload(resume.projects, resume.extractedText),
+    technicalSkills: buildSectionPayload(resume.technicalSkills, resume.extractedText),
+    certifications: buildSectionPayload(resume.certifications, resume.extractedText),
+    experience: buildSectionPayload(resume.experience, resume.extractedText),
+    achievements: buildSectionPayload(resume.achievements, resume.extractedText),
+    languages: buildSectionPayload(resume.languages, resume.extractedText),
     summary: resume.summary || '',
     analysisCompletedAt: resume.analysisCompletedAt,
     createdAt: resume.createdAt,
@@ -121,8 +138,11 @@ async function applyAnalysisToResume(resume, analysisResult) {
   resume.improvements = Array.isArray(analysisResult.improvements) ? analysisResult.improvements : []
   resume.education = Array.isArray(analysisResult.education) ? analysisResult.education : []
   resume.projects = Array.isArray(analysisResult.projects) ? analysisResult.projects : []
+  resume.technicalSkills = Array.isArray(analysisResult.technicalSkills) ? analysisResult.technicalSkills : []
   resume.certifications = Array.isArray(analysisResult.certifications) ? analysisResult.certifications : []
   resume.experience = Array.isArray(analysisResult.experience) ? analysisResult.experience : []
+  resume.achievements = Array.isArray(analysisResult.achievements) ? analysisResult.achievements : []
+  resume.languages = Array.isArray(analysisResult.languages) ? analysisResult.languages : []
   resume.summary = analysisResult.summary || resume.summary || ''
   resume.analysisCompletedAt = new Date()
   resume.status = 'analysis-ready'
@@ -342,8 +362,11 @@ export async function replaceResume(request, response) {
     resume.improvements = []
     resume.education = []
     resume.projects = []
+    resume.technicalSkills = []
     resume.certifications = []
     resume.experience = []
+    resume.achievements = []
+    resume.languages = []
     resume.summary = ''
     resume.analysisCompletedAt = null
     await resume.save()

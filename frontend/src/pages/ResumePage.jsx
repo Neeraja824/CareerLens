@@ -15,6 +15,25 @@ const formatFileSize = (bytes = 0) => {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
 }
 
+const normalizeSectionItems = (value, extractedText) => {
+  const items = Array.isArray(value)
+    ? value.filter((item) => typeof item === 'string' && item.trim())
+    : typeof value === 'string' && value.trim()
+      ? [value]
+      : []
+
+  if (items.length === 1 && extractedText) {
+    const normalizedItem = items[0].toLowerCase().replace(/\s+/g, ' ').trim()
+    const normalizedResume = extractedText.toLowerCase().replace(/\s+/g, ' ').trim()
+
+    if (normalizedItem === normalizedResume) {
+      return []
+    }
+  }
+
+  return items
+}
+
 function ResumePage() {
   const { user, logout, token } = useAuth()
   const navigate = useNavigate()
@@ -70,11 +89,14 @@ function ResumePage() {
       missingSkills: currentResume.missingSkills || [],
       strengths: currentResume.strengths || [],
       improvements: currentResume.improvements || [],
-      education: currentResume.education || [],
-      projects: currentResume.projects || [],
-      certifications: currentResume.certifications || [],
-      experience: currentResume.experience || [],
-      summary: currentResume.summary || '',
+      education: normalizeSectionItems(currentResume.education, currentResume.extractedText),
+      projects: normalizeSectionItems(currentResume.projects, currentResume.extractedText),
+      technicalSkills: normalizeSectionItems(currentResume.technicalSkills, currentResume.extractedText),
+      certifications: normalizeSectionItems(currentResume.certifications, currentResume.extractedText),
+      experience: normalizeSectionItems(currentResume.experience, currentResume.extractedText),
+      achievements: normalizeSectionItems(currentResume.achievements, currentResume.extractedText),
+      languages: normalizeSectionItems(currentResume.languages, currentResume.extractedText),
+      summary: typeof currentResume.summary === 'string' ? currentResume.summary : '',
     }
   }, [currentResume])
 
@@ -203,15 +225,21 @@ function ResumePage() {
     document.getElementById('resume-upload-input')?.click()
   }
 
-  const renderChecklist = (items = []) => {
-    if (!items.length) {
-      return <p className="empty-list-text">No items found.</p>
+  const renderChecklist = (items = [], emptyMessage = 'No items found.') => {
+    const normalizedItems = Array.isArray(items)
+      ? items.filter((item) => typeof item === 'string' && item.trim())
+      : typeof items === 'string' && items.trim()
+        ? [items]
+        : []
+
+    if (!normalizedItems.length) {
+      return <p className="empty-list-text">{emptyMessage}</p>
     }
 
     return (
       <ul className="analysis-list">
-        {items.map((item) => (
-          <li key={item}>{item}</li>
+        {normalizedItems.map((item, index) => (
+          <li key={`${index}-${item}`}>{item}</li>
         ))}
       </ul>
     )
@@ -342,27 +370,44 @@ function ResumePage() {
 
               <div className="analysis-card full-width">
                 <h3>Profile Summary</h3>
-                <p className="analysis-summary">{analysisResult.summary}</p>
+                <p className="analysis-summary">
+                  {analysisResult.summary || 'No profile summary could be generated from the detected resume details.'}
+                </p>
               </div>
 
               <div className="analysis-card">
                 <h3>Education</h3>
-                {renderChecklist(analysisResult.education)}
+                {renderChecklist(analysisResult.education, 'No education details detected.')}
               </div>
 
               <div className="analysis-card">
                 <h3>Projects</h3>
-                {renderChecklist(analysisResult.projects)}
+                {renderChecklist(analysisResult.projects, 'No project details detected.')}
+              </div>
+
+              <div className="analysis-card">
+                <h3>Technical Skills</h3>
+                {renderChecklist(analysisResult.technicalSkills, 'No technical skills section detected.')}
               </div>
 
               <div className="analysis-card">
                 <h3>Certifications</h3>
-                {renderChecklist(analysisResult.certifications)}
+                {renderChecklist(analysisResult.certifications, 'No certification details detected.')}
               </div>
 
               <div className="analysis-card">
                 <h3>Experience / Internships</h3>
-                {renderChecklist(analysisResult.experience)}
+                {renderChecklist(analysisResult.experience, 'No experience details detected.')}
+              </div>
+
+              <div className="analysis-card">
+                <h3>Achievements</h3>
+                {renderChecklist(analysisResult.achievements, 'No achievements detected.')}
+              </div>
+
+              <div className="analysis-card">
+                <h3>Languages</h3>
+                {renderChecklist(analysisResult.languages, 'No languages detected.')}
               </div>
             </div>
           </section>

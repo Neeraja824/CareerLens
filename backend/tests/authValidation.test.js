@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { isSupportedResumeType } from '../controllers/resumeController.js'
+import { buildSectionPayload, isSupportedResumeType } from '../controllers/resumeController.js'
 import { validateRegistrationInput, validateLoginInput } from '../utils/authValidation.js'
 
 test('registration validation rejects invalid email and weak password', () => {
@@ -35,4 +35,14 @@ test('resume uploads accept pdf and doc formats', () => {
   assert.equal(isSupportedResumeType('application/msword'), true)
   assert.equal(isSupportedResumeType('application/vnd.openxmlformats-officedocument.wordprocessingml.document'), true)
   assert.equal(isSupportedResumeType('application/octet-stream'), false)
+})
+
+test('legacy section values matching the full resume are returned as empty', () => {
+  const extractedText = 'Candidate Name\nEducation\nBSc Computer Science\nProjects\nExample App'
+
+  assert.deepEqual(buildSectionPayload([extractedText], extractedText), [])
+  assert.deepEqual(
+    buildSectionPayload(['BSc Computer Science', 'Example College'], extractedText),
+    ['BSc Computer Science', 'Example College'],
+  )
 })

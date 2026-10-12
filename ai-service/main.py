@@ -41,8 +41,15 @@ def normalize_space(text):
 
 def clean_text(text):
     text = text.replace('\x00', ' ')
-    text = re.sub(r'\s+', ' ', text)
-    return text.strip()
+    text = text.replace('\r\n', '\n').replace('\r', '\n')
+    lines = [normalize_space(line) for line in text.split('\n')]
+
+    cleaned_lines = []
+    for line in lines:
+        if line or (cleaned_lines and cleaned_lines[-1]):
+            cleaned_lines.append(line)
+
+    return '\n'.join(cleaned_lines).strip()
 
 
 def extract_text_from_pdf(file_bytes):
@@ -67,9 +74,21 @@ def extract_text_from_docx(file_bytes):
         root = ElementTree.fromstring(document_xml)
         namespace = {'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'}
         paragraphs = []
-        for element in root.findall('.//w:t', namespace):
-            if element.text:
-                paragraphs.append(element.text)
+        for paragraph in root.findall('.//w:p', namespace):
+            paragraph_text = []
+            for element in paragraph.iter():
+                if element.tag.endswith('}t') and element.text:
+                    paragraph_text.append(element.text)
+                elif element.tag.endswith('}tab'):
+                    paragraph_text.append('\t')
+                elif element.tag.endswith('}br'):
+                    paragraph_text.append('\n')
+
+            text = ''.join(paragraph_text).strip()
+            if text:
+                if paragraph.find('w:pPr/w:numPr', namespace) is not None:
+                    text = f'• {text}'
+                paragraphs.append(text)
         return '\n'.join(paragraphs)
     except Exception as error:
         raise TextExtractionError('The DOCX file could not be read.') from error
@@ -113,28 +132,115 @@ def detect_skills(text):
     return unique
 
 
-def extract_lines(text, keywords):
-    lines = []
-    for line in re.split(r'\n+', text):
-        clean_line = normalize_space(line)
-        if not clean_line:
-            continue
-        lower_line = clean_line.lower()
-        if any(keyword in lower_line for keyword in keywords):
-            lines.append(clean_line)
-    return lines
+SECTION_ALIASES = {
+    'education': (
+        'education',
+        'academic background',
+        'academic qualifications',
+        'educational background',
+        'educational qualifications',
+        'education qualifications',
+    ),
+    'projects': (
+        'projects',
+        'project experience',
+        'academic projects',
+        'personal projects',
+        'key projects',
+    ),
+    'technicalSkills': (
+        'technical skills',
+        'technical skill',
+        'skills',
+        'core skills',
+        'core competencies',
+        'technical expertise',
+    ),
+    'certifications': (
+        'certifications',
+        'certificates',
+        'licenses and certifications',
+        'licenses certifications',
+        'licenses',
+    ),
+    'experience': (
+        'experience',
+        'work experience',
+        'professional experience',
+        'employment history',
+        'work history',
+        'internships',
+        'internship',
+        'internship experience',
+    ),
+    'achievements': (
+        'achievements',
+        'awards',
+        'awards and honors',
+        'awards and honours',
+        'honors and awards',
+        'honours and awards',
+        'accomplishments',
+    ),
+    'languages': ('languages', 'language'),
+    'summary': (
+        'summary',
+        'profile summary',
+        'professional summary',
+        'career objective',
+        'objective',
+        'about me',
+        'profile',
+    ),
+}
+
+
+def normalize_heading(text):
+    return re.sub(r'[^a-z0-9]+', ' ', text.lower()).strip()
+
+
+NORMALIZED_SECTION_ALIASES = {
+    normalize_heading(alias): section
+    for section, aliases in SECTION_ALIASES.items()
+    for alias in aliases
+}
+
+
+def detect_section_heading(line):
+    candidate = re.sub(r'^[\s•·▪◦\-*#\d.)]+', '', line).strip()
+    if not candidate:
+        return None, ''
+
+    label, separator, remainder = candidate.partition(':')
+    section = NORMALIZED_SECTION_ALIASES.get(normalize_heading(label))
+    if section:
+        return section, remainder.strip()
+
+    section = NORMALIZED_SECTION_ALIASES.get(normalize_heading(candidate))
+    if section:
+        return section, ''
+
+    return None, ''
 
 
 def extract_profile_sections(text):
-    sections = {
-        'education': extract_lines(text, ['education', 'b.tech', 'b.e', 'bca', 'mca', 'graduation', 'cgpa', 'gpa', 'degree']),
-        'projects': extract_lines(text, ['project', 'projects', 'portfolio', 'built', 'developed']),
-        'certifications': extract_lines(text, ['certification', 'certificate', 'aws certified', 'google cloud', 'oracle', 'microsoft', 'coursera']),
-        'experience': extract_lines(text, ['experience', 'internship', 'intern', 'worked at', 'worked as', 'full time', 'fresher']),
-    }
+    sections = {key: [] for key in SECTION_ALIASES}
+    current_section = None
 
-    for key in sections:
-        sections[key] = [line for line in sections[key] if len(line) > 3]
+    for line in text.splitlines():
+        clean_line = normalize_space(line)
+        if not clean_line:
+            continue
+
+        heading, inline_content = detect_section_heading(clean_line)
+        if heading:
+            current_section = heading
+            if inline_content:
+                sections[current_section].append(inline_content)
+            continue
+
+        if current_section:
+            sections[current_section].append(clean_line)
 
     return sections
 
@@ -196,7 +302,10 @@ def calculate_resume_score(skills, projects, certifications, experience, educati
     return max(0, min(100, score))
 
 
-def build_summary(skills, education, projects, certifications, experience):
+def build_summary(skills, education, projects, certifications, experience, resume_summary=None):
+    if resume_summary:
+        return normalize_space(resume_summary)
+
     parts = []
 
     if skills:
@@ -269,9 +378,19 @@ async def analyze_resume(resume: UploadFile = File(...)):
             'improvements': build_improvements(skills, missing_skills, sections['projects'], sections['certifications'], sections['experience']),
             'education': sections['education'],
             'projects': sections['projects'],
+            'technicalSkills': sections['technicalSkills'],
             'certifications': sections['certifications'],
             'experience': sections['experience'],
-            'summary': build_summary(skills, sections['education'], sections['projects'], sections['certifications'], sections['experience']),
+            'achievements': sections['achievements'],
+            'languages': sections['languages'],
+            'summary': build_summary(
+                skills,
+                sections['education'],
+                sections['projects'],
+                sections['certifications'],
+                sections['experience'],
+                '\n'.join(sections['summary']),
+            ),
         }
         return analysis
     except HTTPException:

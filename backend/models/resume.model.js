@@ -78,11 +78,23 @@ const resumeSchema = new mongoose.Schema(
       type: [String],
       default: [],
     },
+    technicalSkills: {
+      type: [String],
+      default: [],
+    },
     certifications: {
       type: [String],
       default: [],
     },
     experience: {
+      type: [String],
+      default: [],
+    },
+    achievements: {
+      type: [String],
+      default: [],
+    },
+    languages: {
       type: [String],
       default: [],
     },
