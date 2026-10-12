@@ -23,6 +23,30 @@ export function isSupportedResumeType(fileType = '', fileName = '') {
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:8000'
 
+export function getAnalysisFailureMessage(error, fileType) {
+  if (error?.code === 'AI_SERVICE_TIMEOUT') {
+    return 'Resume uploaded, but AI analysis timed out. Please try again shortly.'
+  }
+
+  if (error?.code === 'AI_SERVICE_CONNECTION') {
+    return 'Resume uploaded, but the AI analysis service could not be reached. Please try again later.'
+  }
+
+  if (error?.code === 'AI_SERVICE_RESPONSE' && error.statusCode === 400) {
+    if (fileType === 'docx') {
+      return 'Resume uploaded, but the DOCX file could not be read. Verify that it is a valid, unprotected .docx file with readable text.'
+    }
+
+    if (fileType === 'pdf') {
+      return 'Resume uploaded, but the PDF could not be read. Verify that it contains selectable text and is not damaged.'
+    }
+
+    return 'Resume uploaded, but the document could not be read. Please verify the file and try again.'
+  }
+
+  return 'Resume uploaded successfully, but the AI analysis service is currently unavailable. Please try again later.'
+}
+
 const safeFileType = (fileType, fileName = '') => {
   if (allowedTypes[fileType]) {
     return allowedTypes[fileType]
@@ -82,7 +106,7 @@ function buildResumePayload(resume) {
   }
 }
 
-async function analyzeResumeWithAi(resume, originalMimeType) {
+export async function analyzeResumeWithAi(resume, originalMimeType, fetchImplementation = fetch) {
   const fileBuffer = fs.readFileSync(resume.storagePath)
 
   const inferredMimeType = resume.fileType === 'pdf'
@@ -96,17 +120,20 @@ async function analyzeResumeWithAi(resume, originalMimeType) {
 
   let response
   try {
-    response = await fetch(`${AI_SERVICE_URL}/analyze-resume`, {
+    response = await fetchImplementation(`${AI_SERVICE_URL}/analyze-resume`, {
       method: 'POST',
       body: formData,
       signal: AbortSignal.timeout(30_000),
     })
   } catch (error) {
     const errorCode = error?.cause?.code
-    const message = error?.name === 'TimeoutError'
+    const isTimeout = error?.name === 'TimeoutError' || error?.name === 'AbortError'
+    const message = isTimeout
       ? 'AI service request timed out after 30 seconds.'
       : `AI service request failed${errorCode ? ` (${errorCode})` : ''}.`
-    throw new Error(message)
+    const requestError = new Error(message)
+    requestError.code = isTimeout ? 'AI_SERVICE_TIMEOUT' : 'AI_SERVICE_CONNECTION'
+    throw requestError
   }
 
   if (!response.ok) {
@@ -119,10 +146,19 @@ async function analyzeResumeWithAi(resume, originalMimeType) {
       : typeof errorPayload?.message === 'string'
         ? errorPayload.message
         : 'No error detail was provided.'
-    throw new Error(`AI service returned HTTP ${response.status}: ${serviceDetail.slice(0, 500)}`)
+    const responseError = new Error(`AI service returned HTTP ${response.status}: ${serviceDetail.slice(0, 500)}`)
+    responseError.code = 'AI_SERVICE_RESPONSE'
+    responseError.statusCode = response.status
+    throw responseError
   }
 
-  return response.json()
+  try {
+    return await response.json()
+  } catch {
+    const responseError = new Error('AI service returned an invalid JSON response.')
+    responseError.code = 'AI_SERVICE_RESPONSE'
+    throw responseError
+  }
 }
 
 async function applyAnalysisToResume(resume, analysisResult) {
@@ -196,11 +232,15 @@ export async function uploadResume(request, response) {
     } catch (analysisError) {
       resume.status = 'pending-analysis'
       await resume.save()
-      console.error('Resume analysis failed:', analysisError.message)
+      console.error('Resume analysis failed:', {
+        code: analysisError.code || 'AI_SERVICE_ERROR',
+        statusCode: analysisError.statusCode,
+        detail: analysisError.message?.slice(0, 500),
+      })
 
       return response.status(502).json({
         success: false,
-        message: 'Resume uploaded successfully, but the AI analysis service is currently unavailable. Please try again later.',
+        message: getAnalysisFailureMessage(analysisError, fileType),
         resume: buildResumePayload(resume),
       })
     }
@@ -387,11 +427,15 @@ export async function replaceResume(request, response) {
     } catch (analysisError) {
       resume.status = 'pending-analysis'
       await resume.save()
-      console.error('Replace resume analysis failed:', analysisError.message)
+      console.error('Replace resume analysis failed:', {
+        code: analysisError.code || 'AI_SERVICE_ERROR',
+        statusCode: analysisError.statusCode,
+        detail: analysisError.message?.slice(0, 500),
+      })
 
       return response.status(502).json({
         success: false,
-        message: 'Resume uploaded successfully, but the AI analysis service is currently unavailable. Please try again later.',
+        message: getAnalysisFailureMessage(analysisError, fileType),
         resume: buildResumePayload(resume),
       })
     }

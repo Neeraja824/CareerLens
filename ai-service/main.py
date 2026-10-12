@@ -379,15 +379,27 @@ async def analyze_resume(resume: UploadFile = File(...)):
         try:
             extracted_text = extract_text_from_uploaded_file(file_bytes, resume.filename)
         except TextExtractionError as error:
-            logger.warning('Resume text extraction failed: %s', error)
+            extension = os.path.splitext(file_name)[1]
+            cause_type = type(error.__cause__).__name__ if error.__cause__ else type(error).__name__
+            logger.warning('Resume %s extraction failed (%s)', extension or 'document', cause_type)
+            detail = (
+                'The DOCX file could not be read. Verify that it is a valid, unprotected DOCX file.'
+                if file_name.endswith('.docx')
+                else 'The uploaded document could not be read. Please verify the file and try again.'
+            )
             raise HTTPException(
                 status_code=400,
-                detail='Unable to extract text from the uploaded resume. Please ensure the file is valid.',
+                detail=detail,
             ) from error
 
         cleaned_text = clean_text(extracted_text)
-        if not cleaned_text:
-            raise HTTPException(status_code=400, detail='No readable text was found in the uploaded resume.')
+        if not cleaned_text or not any(character.isalnum() for character in cleaned_text):
+            detail = (
+                'No readable text was found in the DOCX file.'
+                if file_name.endswith('.docx')
+                else 'No readable text was found in the uploaded resume.'
+            )
+            raise HTTPException(status_code=400, detail=detail)
 
         skills = detect_skills(cleaned_text)
         sections = extract_profile_sections(cleaned_text)

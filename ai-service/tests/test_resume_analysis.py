@@ -3,7 +3,7 @@ import io
 import unittest
 import zipfile
 
-from fastapi import UploadFile
+from fastapi import HTTPException, UploadFile
 
 from main import (
     analyze_resume,
@@ -182,6 +182,11 @@ class ResumeAnalysisTests(unittest.TestCase):
         self.assertIn('BSc Computer Science', result['summary'])
         self.assertIn('Campus Planner', result['summary'])
         self.assertIn('Software Intern', result['summary'])
+        self.assertEqual(result['education'], ['BSc Computer Science, North College, 2022-2026, GPA 3.8'])
+        self.assertEqual(result['projects'], ['Campus Planner - Built with Python and React.'])
+        self.assertEqual(result['certifications'], ['Cloud Fundamentals Certificate, 2025'])
+        self.assertEqual(result['experience'], ['Software Intern at Example Labs, Summer 2025'])
+        self.assertEqual(result['technicalSkills'], ['Python, React, PostgreSQL'])
         self.assertGreaterEqual(result['resumeScore'], 0)
         self.assertLessEqual(result['resumeScore'], 100)
 
@@ -191,6 +196,39 @@ class ResumeAnalysisTests(unittest.TestCase):
         extracted = extract_text_from_uploaded_file(file_bytes, 'synthetic.docx')
 
         self.assertEqual(extracted, '• Delivered a measurable project outcome')
+
+    def test_empty_docx_returns_a_client_error_instead_of_success(self):
+        file_bytes = build_docx([])
+
+        with self.assertRaises(HTTPException) as raised:
+            asyncio.run(analyze_resume(UploadFile(filename='empty.docx', file=io.BytesIO(file_bytes))))
+
+        self.assertEqual(raised.exception.status_code, 400)
+        self.assertIn('No readable text', raised.exception.detail)
+
+    def test_non_text_docx_returns_a_client_error(self):
+        file_bytes = build_docx(['---', '•••'])
+
+        with self.assertRaises(HTTPException) as raised:
+            asyncio.run(analyze_resume(UploadFile(filename='symbols.docx', file=io.BytesIO(file_bytes))))
+
+        self.assertEqual(raised.exception.status_code, 400)
+        self.assertIn('No readable text', raised.exception.detail)
+
+    def test_corrupted_encrypted_and_misnamed_docx_files_fail_safely(self):
+        invalid_files = [
+            ('corrupt.docx', b'not a zip archive'),
+            ('encrypted.docx', b'\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1legacy office container'),
+            ('pdf-renamed.docx', build_pdf(['This is a PDF, not a DOCX'])),
+        ]
+
+        for filename, file_bytes in invalid_files:
+            with self.subTest(filename=filename):
+                with self.assertRaises(HTTPException) as raised:
+                    asyncio.run(analyze_resume(UploadFile(filename=filename, file=io.BytesIO(file_bytes))))
+
+                self.assertEqual(raised.exception.status_code, 400)
+                self.assertIn('DOCX file could not be read', raised.exception.detail)
 
     def test_pdf_extraction_and_colon_headings(self):
         pdf_lines = [
