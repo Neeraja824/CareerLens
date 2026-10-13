@@ -1,6 +1,7 @@
 import cors from 'cors'
 import express from 'express'
 import authRoutes from './routes/authRoutes.js'
+import jobRoutes from './routes/jobRoutes.js'
 import resumeRoutes from './routes/resumeRoutes.js'
 import studentRoutes from './routes/studentRoutes.js'
 
@@ -28,6 +29,7 @@ app.get('/api/health', (_request, response) => {
 })
 
 app.use('/api/auth', authRoutes)
+app.use('/api/jobs', jobRoutes)
 app.use('/api/students', studentRoutes)
 app.use('/api/resumes', resumeRoutes)
 

@@ -7,6 +7,7 @@ import DashboardPage from './pages/DashboardPage.jsx'
 import HomePage from './pages/HomePage.jsx'
 import ProfilePage from './pages/ProfilePage.jsx'
 import ResumePage from './pages/ResumePage.jsx'
+import { JobDetailsPage, JobsPage } from './pages/JobsPage.jsx'
 import './App.css'
 
 function AppShell() {
@@ -20,7 +21,8 @@ function AppShell() {
       <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
       <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
       <Route path="/resume" element={<ProtectedRoute><ResumePage /></ProtectedRoute>} />
-      <Route path="/jobs" element={<ProtectedRoute><div className="placeholder-page"><h1>Jobs</h1><p>Job discovery will be added in a later phase.</p></div></ProtectedRoute>} />
+      <Route path="/jobs" element={<ProtectedRoute><JobsPage /></ProtectedRoute>} />
+      <Route path="/jobs/:id" element={<ProtectedRoute><JobDetailsPage /></ProtectedRoute>} />
       <Route path="/applications" element={<ProtectedRoute><div className="placeholder-page"><h1>Applications</h1><p>Application tracking will be added in a later phase.</p></div></ProtectedRoute>} />
       <Route path="*" element={<Navigate to={isAuthenticated ? '/dashboard' : '/'} replace />} />
     </Routes>
