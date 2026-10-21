@@ -147,6 +147,16 @@ test('job listing applies active and unexpired criteria, filters, and pagination
   assert.equal(capturedFilter.$or.some((condition) => condition.expiryDate?.$gte instanceof Date), true)
   assert.deepEqual(capturedFilter.verifiedAt, { $ne: null })
   assert.deepEqual(capturedFilter.verifiedBy, { $in: ['college_placement_office', 'employer'] })
+  assert.deepEqual(capturedFilter.sourceProvider, { $in: ['greenhouse', 'lever'] })
+  assert.deepEqual(capturedFilter.sourceCompany, { $type: 'string', $ne: '' })
+  assert.deepEqual(capturedFilter.sourceListingId, { $type: 'string', $ne: '' })
+  assert.equal(capturedFilter.sourceCareersUrl.source, '^https:\\/\\/')
+  assert.equal(capturedFilter.sourceUrl.test('https://boards.greenhouse.io/example/jobs/1'), true)
+  assert.equal(capturedFilter.sourceUrl.test('https://example.com/jobs/1'), false)
+  assert.equal(capturedFilter.externalApplicationUrl.test('https://jobs.lever.co/example/1'), true)
+  assert.equal(capturedFilter.externalApplicationUrl.test('http://jobs.lever.co/example/1'), false)
+  assert.ok(capturedFilter.lastCheckedAt.$gte instanceof Date)
+  assert.ok(capturedFilter.lastCheckedAt.$lte instanceof Date)
   assert.equal(capturedFilter.$and[0].$or[0].title.source, 'C\\+\\+')
   assert.equal(capturedFilter.location.$options, 'i')
   assert.equal(capturedFilter.experienceLevel.$options, 'i')
@@ -161,16 +171,27 @@ test('job listing applies active and unexpired criteria, filters, and pagination
 
 test('job listing excludes inactive and expired records', async () => {
   const now = new Date()
+  const officialFeedFields = (sourceListingId, lastCheckedAt = now) => ({
+    sourceProvider: 'greenhouse',
+    sourceCompany: 'Example Employer',
+    sourceListingId,
+    sourceCareersUrl: 'https://example.com/careers',
+    sourceUrl: 'https://boards.greenhouse.io/example/jobs/1',
+    externalApplicationUrl: 'https://boards.greenhouse.io/example/jobs/1',
+    lastCheckedAt,
+  })
   const records = [
-    { _id: 'active-no-expiry', isActive: true, availabilityConfirmedAt: new Date(now.getTime() - 60_000), expiryDate: null, verifiedAt: now, verifiedBy: 'employer' },
-    { _id: 'active-future-expiry', isActive: true, availabilityConfirmedAt: now, expiryDate: new Date(now.getTime() + 86400000), verifiedAt: now, verifiedBy: 'college_placement_office' },
-    { _id: 'active-unverified', isActive: true, availabilityConfirmedAt: now, expiryDate: null, verifiedAt: null, verifiedBy: 'employer' },
-    { _id: 'active-unapproved-source', isActive: true, availabilityConfirmedAt: now, expiryDate: null, verifiedAt: now, verifiedBy: 'job-board' },
-    { _id: 'inactive-no-expiry', isActive: false, availabilityConfirmedAt: now, expiryDate: null, verifiedAt: now, verifiedBy: 'employer' },
-    { _id: 'active-expired', isActive: true, availabilityConfirmedAt: now, expiryDate: new Date(now.getTime() - 86400000), verifiedAt: now, verifiedBy: 'employer' },
-    { _id: 'active-stale-confirmation', isActive: true, availabilityConfirmedAt: new Date(now.getTime() - 25 * 60 * 60 * 1000), expiryDate: null, verifiedAt: now, verifiedBy: 'employer' },
-    { _id: 'active-missing-confirmation', isActive: true, expiryDate: null, verifiedAt: now, verifiedBy: 'employer' },
-    { _id: 'active-future-confirmation', isActive: true, availabilityConfirmedAt: new Date(now.getTime() + 60_000), expiryDate: null, verifiedAt: now, verifiedBy: 'employer' },
+    { ...officialFeedFields('1'), _id: 'active-no-expiry', isActive: true, availabilityConfirmedAt: new Date(now.getTime() - 60_000), expiryDate: null, verifiedAt: now, verifiedBy: 'employer' },
+    { ...officialFeedFields('2'), _id: 'active-future-expiry', isActive: true, availabilityConfirmedAt: now, expiryDate: new Date(now.getTime() + 86400000), verifiedAt: now, verifiedBy: 'college_placement_office' },
+    { ...officialFeedFields('3'), _id: 'active-unverified', isActive: true, availabilityConfirmedAt: now, expiryDate: null, verifiedAt: null, verifiedBy: 'employer' },
+    { ...officialFeedFields('4'), _id: 'active-unapproved-source', isActive: true, availabilityConfirmedAt: now, expiryDate: null, verifiedAt: now, verifiedBy: 'job-board' },
+    { ...officialFeedFields('5'), _id: 'inactive-no-expiry', isActive: false, availabilityConfirmedAt: now, expiryDate: null, verifiedAt: now, verifiedBy: 'employer' },
+    { ...officialFeedFields('6'), _id: 'active-expired', isActive: true, availabilityConfirmedAt: now, expiryDate: new Date(now.getTime() - 86400000), verifiedAt: now, verifiedBy: 'employer' },
+    { ...officialFeedFields('7'), _id: 'active-stale-confirmation', isActive: true, availabilityConfirmedAt: new Date(now.getTime() - 25 * 60 * 60 * 1000), expiryDate: null, verifiedAt: now, verifiedBy: 'employer' },
+    { ...officialFeedFields('8'), _id: 'active-missing-confirmation', isActive: true, expiryDate: null, verifiedAt: now, verifiedBy: 'employer' },
+    { ...officialFeedFields('9'), _id: 'active-future-confirmation', isActive: true, availabilityConfirmedAt: new Date(now.getTime() + 60_000), expiryDate: null, verifiedAt: now, verifiedBy: 'employer' },
+    { _id: 'active-user-supplied-verification', isActive: true, availabilityConfirmedAt: now, expiryDate: null, verifiedAt: now, verifiedBy: 'employer' },
+    { ...officialFeedFields('10', new Date(now.getTime() - 25 * 60 * 60 * 1000)), _id: 'active-stale-feed-check', isActive: true, availabilityConfirmedAt: now, expiryDate: null, verifiedAt: now, verifiedBy: 'employer' },
   ]
   let matchedRecords
   const queryChain = {
@@ -187,11 +208,23 @@ test('job listing excludes inactive and expired records', async () => {
       ).expiryDate.$gte
       const allowsNoExpiry = filter.$or.some((condition) => condition.expiryDate === null)
       const confirmationRange = filter.availabilityConfirmedAt
+      const feedCheckRange = filter.lastCheckedAt
       matchedRecords = records.filter((job) => (
         job.isActive === filter.isActive
         && job.availabilityConfirmedAt instanceof Date
         && job.availabilityConfirmedAt >= confirmationRange.$gte
         && job.availabilityConfirmedAt <= confirmationRange.$lte
+        && filter.sourceProvider.$in.includes(job.sourceProvider)
+        && typeof job.sourceCompany === 'string'
+        && job.sourceCompany.length > 0
+        && typeof job.sourceListingId === 'string'
+        && job.sourceListingId.length > 0
+        && filter.sourceCareersUrl.test(job.sourceCareersUrl)
+        && filter.sourceUrl.test(job.sourceUrl)
+        && filter.externalApplicationUrl.test(job.externalApplicationUrl)
+        && job.lastCheckedAt instanceof Date
+        && job.lastCheckedAt >= feedCheckRange.$gte
+        && job.lastCheckedAt <= feedCheckRange.$lte
         && job.verifiedAt !== null
         && filter.verifiedBy.$in.includes(job.verifiedBy)
         && (job.expiryDate === null ? allowsNoExpiry : job.expiryDate >= expiryMinimum)

@@ -40,6 +40,14 @@ const normalizeSectionItems = (value, extractedText) => {
   return items
 }
 
+const removeDuplicateItems = (items) => items.filter((item, index) => {
+  const normalizedItem = item.toLowerCase().replace(/\s+/g, ' ').trim()
+
+  return items.findIndex((candidate) => (
+    candidate.toLowerCase().replace(/\s+/g, ' ').trim() === normalizedItem
+  )) === index
+})
+
 function ResumePage() {
   const { user, logout, token } = useAuth()
   const navigate = useNavigate()
@@ -89,6 +97,9 @@ function ResumePage() {
       return null
     }
 
+    const technicalSkills = normalizeSectionItems(currentResume.technicalSkills, currentResume.extractedText)
+    const detectedSkills = normalizeSectionItems(currentResume.skills, currentResume.extractedText)
+
     return {
       resumeScore: currentResume.resumeScore ?? 0,
       skills: currentResume.skills || [],
@@ -97,7 +108,7 @@ function ResumePage() {
       improvements: currentResume.improvements || [],
       education: normalizeSectionItems(currentResume.education, currentResume.extractedText),
       projects: normalizeSectionItems(currentResume.projects, currentResume.extractedText),
-      technicalSkills: normalizeSectionItems(currentResume.technicalSkills, currentResume.extractedText),
+      technicalSkills: removeDuplicateItems(technicalSkills.length ? technicalSkills : detectedSkills),
       certifications: normalizeSectionItems(currentResume.certifications, currentResume.extractedText),
       experience: normalizeSectionItems(currentResume.experience, currentResume.extractedText),
       achievements: normalizeSectionItems(currentResume.achievements, currentResume.extractedText),

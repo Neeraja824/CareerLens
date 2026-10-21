@@ -126,8 +126,6 @@ button { cursor: pointer; }
 .jobs-results-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
 .jobs-results-heading h2 { margin: 0; font-size: 1.3rem; }
 .jobs-results-heading span, .job-posted, .job-source { color: var(--muted); font-size: 0.88rem; }
-.fictional-demo-section { display: grid; gap: 16px; }
-.fictional-demo-banner { padding: 16px 20px; border: 2px solid #b42318; border-radius: 14px; background: #fff0ee; color: #8c1d14; font-size: 1rem; font-weight: 900; text-align: center; }
 .job-list { display: grid; gap: 16px; }
 .job-card { min-width: 0; padding: 20px; border: 1px solid var(--line); border-radius: 18px; background: white; box-shadow: 0 12px 24px rgba(16,33,61,0.035); }
 .job-card-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }

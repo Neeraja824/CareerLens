@@ -202,6 +202,9 @@ test('matching endpoint uses the authenticated student and returns only match da
   assert.ok(jobFilter.$or.some((condition) => condition.expiryDate?.$gte instanceof Date))
   assert.deepEqual(jobFilter.verifiedAt, { $ne: null })
   assert.deepEqual(jobFilter.verifiedBy, { $in: ['college_placement_office', 'employer'] })
+  assert.deepEqual(jobFilter.sourceProvider, { $in: ['greenhouse', 'lever'] })
+  assert.ok(jobFilter.lastCheckedAt.$gte instanceof Date)
+  assert.ok(jobFilter.lastCheckedAt.$lte instanceof Date)
   assert.equal(jobProjection, 'title requiredSkills')
   assert.deepEqual(resumeFilter, {
     userId: 'authenticated-student-id',
@@ -302,6 +305,9 @@ test('recommendations use the authenticated current resume and rank verified act
   assert.ok(capturedJobsFilter.$or.some((condition) => condition.expiryDate?.$gte instanceof Date))
   assert.deepEqual(capturedJobsFilter.verifiedBy, { $in: ['college_placement_office', 'employer'] })
   assert.deepEqual(capturedJobsFilter.verifiedAt, { $ne: null })
+  assert.deepEqual(capturedJobsFilter.sourceProvider, { $in: ['greenhouse', 'lever'] })
+  assert.ok(capturedJobsFilter.lastCheckedAt.$gte instanceof Date)
+  assert.ok(capturedJobsFilter.lastCheckedAt.$lte instanceof Date)
 })
 
 test('recommendations mark missing or pending resumes and unscorable jobs without inventing a score', async () => {
@@ -381,6 +387,9 @@ test('matching endpoint returns not found for missing, inactive, and expired job
   assert.ok(capturedFilter.$or.some((condition) => condition.expiryDate?.$gte instanceof Date))
   assert.deepEqual(capturedFilter.verifiedAt, { $ne: null })
   assert.deepEqual(capturedFilter.verifiedBy, { $in: ['college_placement_office', 'employer'] })
+  assert.deepEqual(capturedFilter.sourceProvider, { $in: ['greenhouse', 'lever'] })
+  assert.ok(capturedFilter.lastCheckedAt.$gte instanceof Date)
+  assert.ok(capturedFilter.lastCheckedAt.$lte instanceof Date)
 })
 
 test('matching endpoint requires authentication and existing job routes stay public', async () => {

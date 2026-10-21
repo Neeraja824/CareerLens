@@ -2,11 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import api from '../services/api.js'
 import { useAuth } from '../context/AuthContext.jsx'
-import demoJobs from '../data/demoJobs.js'
 import JobCard from '../components/jobs/JobCard.jsx'
-
-const isFictionalJobsDemoEnabled = import.meta.env.DEV
-  && import.meta.env.VITE_JOBS_DEMO === 'true'
 
 const officialCompanyCareers = [
   {
@@ -157,7 +153,6 @@ function JobsPage() {
   }, [])
 
   useEffect(() => {
-    if (isFictionalJobsDemoEnabled) return
     fetchRecommendations()
   }, [fetchRecommendations])
 
@@ -214,44 +209,10 @@ function JobsPage() {
         <div>
           <p className="eyebrow">Career opportunities</p>
           <h1>{activeView === 'browse' ? 'Explore verified jobs' : 'Opportunities matched to you'}</h1>
-          <p className="jobs-intro">{isFictionalJobsDemoEnabled
-            ? 'Fictional development samples for checking the job-card layout only.'
-            : 'Explore current listings from employer career feeds or see opportunities ranked against your analyzed resume.'}</p>
+          <p className="jobs-intro">Explore current listings from employer career feeds or see opportunities ranked against your analyzed resume.</p>
         </div>
       </header>
 
-      {isFictionalJobsDemoEnabled ? (
-        <section className="fictional-demo-section" aria-label="Fictional job-card demo">
-          <div className="fictional-demo-banner" role="alert">
-            FICTIONAL DEMO — NOT A REAL JOB; NOT VERIFIED
-          </div>
-          <div className="job-list">
-            {demoJobs.map((job) => (
-              <article className="job-card" key={job.id}>
-                <div className="job-card-heading">
-                  <div>
-                    <p className="job-company">{job.companyName}</p>
-                    <h2>{job.title}</h2>
-                  </div>
-                </div>
-                <div className="job-meta">
-                  <span>{job.location}</span>
-                  <span>{job.experienceLevel}</span>
-                  <span>{job.employmentType}</span>
-                </div>
-                <p className="job-description">{job.description}</p>
-                <ul className="job-skill-list" aria-label="Fictional sample skills">
-                  {job.requiredSkills.map((skill) => <li key={skill}>{skill}</li>)}
-                </ul>
-                <div className="job-card-footer">
-                  <span className="job-source">Fictional sample data — no application link</span>
-                </div>
-              </article>
-            ))}
-          </div>
-        </section>
-      ) : (
-        <>
       <nav className="jobs-view-tabs" aria-label="Job views">
         <button
           type="button"
@@ -345,12 +306,12 @@ function JobsPage() {
         )}
         {!isLoading && !errorMessage && jobs.length === 0 && (
           activeView === 'browse'
-            ? <div className="empty-state jobs-empty-state"><h3>No listings match your search</h3><p>Try broadening or clearing your filters to see more currently available opportunities.</p></div>
+            ? <div className="empty-state jobs-empty-state"><h3>No active verified jobs match your search</h3><p>Try broadening or clearing your filters, or explore the official employer career pages below.</p></div>
             : <div className="empty-state jobs-empty-state">
               <h3>No active verified jobs are available</h3>
               <p>
                 There are no active listings verified by an employer or college placement office right now.
-                Please check back as new opportunities are verified.
+                Please check back as new opportunities are verified, or explore the official employer career pages below.
               </p>
             </div>
         )}
@@ -397,8 +358,6 @@ function JobsPage() {
               <div className="job-list">{fresherJobs.map((job) => <JobCard key={`fresher-${job._id}`} job={job} showMatch />)}</div>
             </section>
           )}
-        </>
-      )}
         </>
       )}
       <section className="official-careers-section" aria-labelledby="official-careers-heading">

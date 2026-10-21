@@ -1,20 +1,8 @@
 # React + Vite
 
-## Fictional jobs-card demo
-
-The Jobs page can show isolated, fictional sample cards for local UI work. The demo is available only when Vite is running in development mode and `VITE_JOBS_DEMO=true`; it does not call the recommendations API or use importer/database data.
-
-To enable it locally, add this line to `frontend/.env.local` and restart the Vite server:
-
-```env
-VITE_JOBS_DEMO=true
-```
-
-To disable it, remove the line or set it to `false`, then restart Vite. The demo is forcibly disabled in production builds. Every sample is marked as fictional and has no application or job-details link.
-
 ## Jobs page
 
-The Jobs page keeps personalized recommendations and adds a separate browse view backed by the existing `/jobs` API. Browse supports keyword, location, required-skill, experience, and job-type filters with pagination. Listings show source links and source-check metadata; salary and other details appear only when present in the API response. Both views continue to use the backend's active, verified, expiry, and availability-freshness filters.
+The Jobs page keeps personalized recommendations and adds a separate browse view backed by the existing `/jobs` API. Browse supports keyword, location, required-skill, experience, and job-type filters with pagination. Listings are restricted to active, unexpired, recently checked jobs from the validated Greenhouse or Lever employer feeds, with official feed application URLs. If no listings are available, the page shows an empty state and links to official employer career pages.
 
 This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
 
