@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 
 import Job from '../models/job.model.js'
 import Resume from '../models/resume.model.js'
-import { getJobMatch } from '../controllers/jobController.js'
+import { getJobMatch, getRecommendedJobs } from '../controllers/jobController.js'
 import jobRoutes from '../routes/jobRoutes.js'
 import { authMiddleware } from '../middleware/authMiddleware.js'
 import { calculateResumeSkillMatch } from '../utils/resumeSkillMatch.js'
@@ -197,7 +197,11 @@ test('matching endpoint uses the authenticated student and returns only match da
 
   assert.equal(jobFilter._id, jobId)
   assert.equal(jobFilter.isActive, true)
+  assert.ok(jobFilter.availabilityConfirmedAt.$gte instanceof Date)
+  assert.ok(jobFilter.availabilityConfirmedAt.$lte instanceof Date)
   assert.ok(jobFilter.$or.some((condition) => condition.expiryDate?.$gte instanceof Date))
+  assert.deepEqual(jobFilter.verifiedAt, { $ne: null })
+  assert.deepEqual(jobFilter.verifiedBy, { $in: ['college_placement_office', 'employer'] })
   assert.equal(jobProjection, 'title requiredSkills')
   assert.deepEqual(resumeFilter, {
     userId: 'authenticated-student-id',
@@ -235,6 +239,95 @@ test('matching endpoint returns unavailable when the current resume is missing o
       assert.equal(response.statusCode, 200)
       assert.equal(response.body.resumeSkillMatch.status, 'unavailable')
       assert.equal(response.body.resumeSkillMatch.matchPercentage, null)
+    })
+  }
+})
+
+test('recommendations use the authenticated current resume and rank verified active listings by score', async () => {
+  let capturedResumeFilter
+  let capturedResumeProjection
+  let capturedJobsFilter
+  const jobs = [
+    { _id: 'newest', title: 'Newest role', requiredSkills: ['Go'], postingDate: new Date('2026-06-03') },
+    { _id: 'partial', title: 'Partial role', requiredSkills: ['React', 'Node.js'], postingDate: new Date('2026-06-02') },
+    { _id: 'best', title: 'Best role', requiredSkills: ['React'], postingDate: new Date('2026-06-01') },
+  ]
+
+  await withModelStubs({
+    Job: {
+      find(filter) {
+        capturedJobsFilter = filter
+        return {
+          sort(sort) {
+            assert.deepEqual(sort, { postingDate: -1, _id: -1 })
+            return this
+          },
+          lean: async () => jobs,
+        }
+      },
+    },
+    Resume: {
+      findOne(filter) {
+        capturedResumeFilter = filter
+        return {
+          select(fields) {
+            capturedResumeProjection = fields
+            return this
+          },
+          lean: async () => readyResume(['React']),
+        }
+      },
+    },
+  }, async () => {
+    const response = createResponse()
+    await getRecommendedJobs({
+      student: { id: 'authenticated-student-id' },
+      query: { studentId: 'attacker-supplied-id' },
+    }, response)
+
+    assert.equal(response.statusCode, 200)
+    assert.equal(response.body.resumeStatus, 'analysis-ready')
+    assert.deepEqual(response.body.recommendations.map((job) => [job._id, job.resumeSkillMatch.matchPercentage]), [
+      ['best', 100],
+      ['partial', 50],
+      ['newest', 0],
+    ])
+  })
+
+  assert.deepEqual(capturedResumeFilter, { userId: 'authenticated-student-id', isCurrent: true })
+  assert.equal(capturedResumeProjection, 'isCurrent status skills')
+  assert.equal(capturedJobsFilter.isActive, true)
+  assert.ok(capturedJobsFilter.availabilityConfirmedAt.$gte instanceof Date)
+  assert.ok(capturedJobsFilter.availabilityConfirmedAt.$lte instanceof Date)
+  assert.ok(capturedJobsFilter.$or.some((condition) => condition.expiryDate?.$gte instanceof Date))
+  assert.deepEqual(capturedJobsFilter.verifiedBy, { $in: ['college_placement_office', 'employer'] })
+  assert.deepEqual(capturedJobsFilter.verifiedAt, { $ne: null })
+})
+
+test('recommendations mark missing or pending resumes and unscorable jobs without inventing a score', async () => {
+  for (const [resume, expectedStatus] of [
+    [null, 'missing'],
+    [{ isCurrent: true, status: 'pending-analysis', skills: ['React'] }, 'analysis-pending'],
+  ]) {
+    await withModelStubs({
+      Job: {
+        find() {
+          return { sort() { return this }, lean: async () => [{ _id: 'verified', requiredSkills: [] }] }
+        },
+      },
+      Resume: {
+        findOne() {
+          return { select() { return this }, lean: async () => resume }
+        },
+      },
+    }, async () => {
+      const response = createResponse()
+      await getRecommendedJobs({ student: { id: 'authenticated-student-id' } }, response)
+      assert.equal(response.statusCode, 200)
+      assert.equal(response.body.resumeStatus, expectedStatus)
+      assert.equal(response.body.recommendations[0].resumeSkillMatch.matchPercentage, null)
+      assert.deepEqual(response.body.recommendations[0].resumeSkillMatch.matchedSkills, [])
+      assert.deepEqual(response.body.recommendations[0].resumeSkillMatch.missingSkills, [])
     })
   }
 })
@@ -282,15 +375,21 @@ test('matching endpoint returns not found for missing, inactive, and expired job
   })
 
   assert.equal(capturedFilter.isActive, true)
+  assert.ok(capturedFilter.availabilityConfirmedAt.$gte instanceof Date)
+  assert.ok(capturedFilter.availabilityConfirmedAt.$lte instanceof Date)
   assert.ok(capturedFilter.$or.some((condition) => condition.expiryDate === null))
   assert.ok(capturedFilter.$or.some((condition) => condition.expiryDate?.$gte instanceof Date))
+  assert.deepEqual(capturedFilter.verifiedAt, { $ne: null })
+  assert.deepEqual(capturedFilter.verifiedBy, { $in: ['college_placement_office', 'employer'] })
 })
 
 test('matching endpoint requires authentication and existing job routes stay public', async () => {
+  const recommendedRoute = jobRoutes.stack.find((layer) => layer.route?.path === '/recommended')
   const matchRoute = jobRoutes.stack.find((layer) => layer.route?.path === '/:id/match')
   const listRoute = jobRoutes.stack.find((layer) => layer.route?.path === '/')
   const detailRoute = jobRoutes.stack.find((layer) => layer.route?.path === '/:id')
 
+  assert.equal(recommendedRoute.route.stack[0].handle, authMiddleware)
   assert.equal(matchRoute.route.stack[0].handle, authMiddleware)
   assert.equal(listRoute.route.stack.length, 1)
   assert.equal(detailRoute.route.stack.length, 1)

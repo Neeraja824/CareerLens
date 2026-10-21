@@ -1,6 +1,6 @@
 import Job from '../models/job.model.js'
 import Resume from '../models/resume.model.js'
-import { buildActiveJobFilter } from '../utils/jobFilters.js'
+import { buildVerifiedActiveJobFilter } from '../utils/jobFilters.js'
 import { calculateResumeSkillMatch } from '../utils/resumeSkillMatch.js'
 
 const allowedQueryParameters = new Set([
@@ -97,7 +97,7 @@ export function validateJobListQuery(query) {
 }
 
 function buildJobListFilter(filters) {
-  const filter = buildActiveJobFilter()
+  const filter = buildVerifiedActiveJobFilter()
 
   if (filters.keyword) {
     const keyword = new RegExp(escapeRegularExpression(filters.keyword), 'i')
@@ -166,6 +166,51 @@ export async function getJobs(request, response) {
   }
 }
 
+export async function getRecommendedJobs(request, response) {
+  try {
+    const [resume, jobs] = await Promise.all([
+      Resume.findOne({
+        userId: request.student.id,
+        isCurrent: true,
+      })
+        .select('isCurrent status skills')
+        .lean(),
+      Job.find(buildVerifiedActiveJobFilter())
+        .sort({ postingDate: -1, _id: -1 })
+        .lean(),
+    ])
+
+    const recommendations = jobs
+      .map((job) => ({
+        ...job,
+        resumeSkillMatch: calculateResumeSkillMatch(resume, job.requiredSkills),
+      }))
+      .sort((first, second) => {
+        const firstScore = first.resumeSkillMatch.matchPercentage
+        const secondScore = second.resumeSkillMatch.matchPercentage
+        if (firstScore === null) return secondScore === null ? 0 : 1
+        if (secondScore === null) return -1
+        return secondScore - firstScore
+      })
+
+    return response.status(200).json({
+      success: true,
+      resumeStatus: !resume
+        ? 'missing'
+        : resume.status === 'analysis-ready' && resume.isCurrent
+          ? 'analysis-ready'
+          : 'analysis-pending',
+      recommendations,
+    })
+  } catch (error) {
+    console.error('Get recommended jobs error:', error)
+    return response.status(500).json({
+      success: false,
+      message: 'Unable to load job recommendations.',
+    })
+  }
+}
+
 export async function getJobById(request, response) {
   if (!/^[a-f\d]{24}$/i.test(request.params.id)) {
     return response.status(400).json({
@@ -177,7 +222,7 @@ export async function getJobById(request, response) {
   try {
     const job = await Job.findOne({
       _id: request.params.id,
-      ...buildActiveJobFilter(),
+      ...buildVerifiedActiveJobFilter(),
     }).lean()
 
     if (!job) {
@@ -211,7 +256,7 @@ export async function getJobMatch(request, response) {
   try {
     const job = await Job.findOne({
       _id: request.params.id,
-      ...buildActiveJobFilter(),
+      ...buildVerifiedActiveJobFilter(),
     })
       .select('title requiredSkills')
       .lean()

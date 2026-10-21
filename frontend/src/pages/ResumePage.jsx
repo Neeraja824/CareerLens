@@ -15,6 +15,12 @@ const formatFileSize = (bytes = 0) => {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
 }
 
+const resumeMimeTypes = {
+  '.pdf': 'application/pdf',
+  '.doc': 'application/msword',
+  '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+}
+
 const normalizeSectionItems = (value, extractedText) => {
   const items = Array.isArray(value)
     ? value.filter((item) => typeof item === 'string' && item.trim())
@@ -102,17 +108,18 @@ function ResumePage() {
 
   const validateFile = (file) => {
     if (!file) {
-      return 'Please upload a PDF or DOCX file.'
+      return 'Please upload a PDF, DOC, or DOCX file.'
     }
 
-    const allowedTypes = [
-      'application/pdf',
-      'application/msword',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    ]
+    const extension = file.name.toLowerCase().match(/\.[^.]+$/)?.[0]
+    const expectedMimeType = Object.hasOwn(resumeMimeTypes, extension)
+      ? resumeMimeTypes[extension]
+      : null
+    const normalizedMimeType = (file.type || '').toLowerCase()
+    const isMimeTypeRecognized = Object.values(resumeMimeTypes).includes(normalizedMimeType)
 
-    if (!allowedTypes.includes(file.type)) {
-      return 'Please upload a PDF or DOCX file.'
+    if (!expectedMimeType || (isMimeTypeRecognized && normalizedMimeType !== expectedMimeType)) {
+      return 'Please upload a PDF, DOC, or DOCX file.'
     }
 
     if (file.size > 5 * 1024 * 1024) {
@@ -155,7 +162,7 @@ function ResumePage() {
 
   const handleSubmit = async () => {
     if (!selectedFile) {
-      setErrorMessage('Please upload a PDF or DOCX file.')
+      setErrorMessage('Please upload a PDF, DOC, or DOCX file.')
       setSuccessMessage('')
       return
     }
@@ -186,7 +193,20 @@ function ResumePage() {
       setResumeToReplaceId(null)
       clearFileInput()
     } catch (error) {
-      setErrorMessage(error.response?.data?.message || 'Resume upload failed. Please try again.')
+      const isAnalysisFailure = error.response?.status === 502
+      const uploadErrorMessage = error.response?.data?.message || (isAnalysisFailure
+        ? 'Resume was uploaded, but AI analysis failed. Please try again later.'
+        : 'Resume upload failed. Please try again.')
+      if (isAnalysisFailure && error.response.data?.resume) {
+        try {
+          await refreshResumes()
+        } catch {
+          setErrorMessage(`${uploadErrorMessage} The saved resume could not be refreshed; reload this page to see its status.`)
+          return
+        }
+      }
+      setSuccessMessage('')
+      setErrorMessage(uploadErrorMessage)
     } finally {
       setIsSubmitting(false)
     }
@@ -208,9 +228,27 @@ function ResumePage() {
     }
   }
 
-  const handleView = (resume) => {
-    const baseUrl = api.defaults.baseURL.replace(/\/api$/, '')
-    window.open(`${baseUrl}/api/resumes/${resume.id}/view`, '_blank', 'noopener,noreferrer')
+  const handleView = async (resume) => {
+    const resumeWindow = window.open('about:blank', '_blank')
+    if (!resumeWindow) {
+      setErrorMessage('Allow pop-ups to view your resume.')
+      return
+    }
+
+    resumeWindow.opener = null
+    setErrorMessage('')
+
+    let objectUrl
+    try {
+      const response = await api.get(`/resumes/${resume.id}/view`, { responseType: 'blob' })
+      objectUrl = URL.createObjectURL(response.data)
+      resumeWindow.addEventListener('load', () => URL.revokeObjectURL(objectUrl), { once: true })
+      resumeWindow.location.replace(objectUrl)
+    } catch (error) {
+      if (objectUrl) URL.revokeObjectURL(objectUrl)
+      resumeWindow.close()
+      setErrorMessage(error.response?.data?.message || 'Unable to view this resume.')
+    }
   }
 
   const handleLogout = () => {

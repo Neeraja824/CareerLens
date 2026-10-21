@@ -1,17 +1,40 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import api from '../services/api.js'
 import { useAuth } from '../context/AuthContext.jsx'
+import demoJobs from '../data/demoJobs.js'
+import JobCard from '../components/jobs/JobCard.jsx'
 
-const pageSize = 12
+const isFictionalJobsDemoEnabled = import.meta.env.DEV
+  && import.meta.env.VITE_JOBS_DEMO === 'true'
 
-const initialFilters = {
-  keyword: '',
-  location: '',
-  skills: '',
-  experienceLevel: '',
-  employmentType: '',
-}
+const officialCompanyCareers = [
+  {
+    company: 'Amazon',
+    description: 'Explore roles and apply directly on Amazon’s official careers website.',
+    url: 'https://www.amazon.jobs/',
+  },
+  {
+    company: 'Google',
+    description: 'Explore roles and apply directly on Google’s official careers website.',
+    url: 'https://www.google.com/about/careers/applications/',
+  },
+  {
+    company: 'Infosys',
+    description: 'Explore roles and apply directly on Infosys’s official careers website.',
+    url: 'https://www.infosys.com/careers/',
+  },
+  {
+    company: 'Microsoft',
+    description: 'Search and apply for opportunities directly on Microsoft’s official careers website.',
+    url: 'https://jobs.careers.microsoft.com/global/en/search',
+  },
+  {
+    company: 'TCS',
+    description: 'Explore roles and apply directly on TCS’s official careers website.',
+    url: 'https://www.tcs.com/careers',
+  },
+]
 
 function getRequestErrorMessage(error, fallback) {
   if (error.response?.status === 401) {
@@ -68,173 +91,250 @@ function JobsLayout({ children, activeItem = 'jobs' }) {
   )
 }
 
-function JobCard({ job }) {
-  const postedDate = formatDate(job.postingDate)
-
-  return (
-    <article className="job-card">
-      <div className="job-card-heading">
-        <div>
-          <p className="job-company">{job.companyName}</p>
-          <h2>{job.title}</h2>
-        </div>
-        {postedDate && <span className="job-posted">Posted {postedDate}</span>}
-      </div>
-      <div className="job-meta">
-        <span>{job.location}</span>
-        <span>{job.experienceLevel}</span>
-        <span>{job.employmentType}</span>
-      </div>
-      <p className="job-description">{job.description}</p>
-      {Array.isArray(job.requiredSkills) && job.requiredSkills.length > 0 && (
-        <ul className="job-skill-list" aria-label="Required skills">
-          {job.requiredSkills.map((skill, index) => (
-            <li key={`${skill}-${index}`}>{skill}</li>
-          ))}
-        </ul>
-      )}
-      <div className="job-card-footer">
-        <span className="job-source">Source: {job.sourceName}</span>
-        <Link className="primary-button small-button" to={`/jobs/${job._id}`}>View details</Link>
-      </div>
-    </article>
-  )
-}
-
 function JobsPage() {
-  const [filters, setFilters] = useState(initialFilters)
-  const [appliedFilters, setAppliedFilters] = useState(initialFilters)
   const [jobs, setJobs] = useState([])
-  const [pagination, setPagination] = useState({ page: 1, limit: pageSize, totalJobs: 0, totalPages: 0 })
-  const [availableJobCount, setAvailableJobCount] = useState(null)
+  const [resumeStatus, setResumeStatus] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState('')
+  const [activeView, setActiveView] = useState('recommended')
+  const [filters, setFilters] = useState({
+    keyword: '',
+    location: '',
+    skills: '',
+    experienceLevel: '',
+    employmentType: '',
+  })
+  const [page, setPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+  const requestSequence = useRef(0)
 
-  const fetchJobs = useCallback((nextFilters, page) => {
-    const params = { page, limit: pageSize }
-    for (const [name, value] of Object.entries(nextFilters)) {
-      if (value.trim()) params[name] = value.trim()
-    }
+  const fetchRecommendations = useCallback(() => {
+    const requestId = ++requestSequence.current
+    return api.get('/jobs/recommended')
+    .then((response) => {
+      if (requestId !== requestSequence.current) return
+      const recommendations = Array.isArray(response.data.recommendations)
+        ? response.data.recommendations
+        : []
+      setJobs(recommendations)
+      setResumeStatus(response.data.resumeStatus || 'missing')
+    })
+    .catch((error) => {
+      if (requestId !== requestSequence.current) return
+      setJobs([])
+      setErrorMessage(getRequestErrorMessage(error, 'Unable to load recommendations.'))
+    })
+    .finally(() => {
+      if (requestId === requestSequence.current) setIsLoading(false)
+    })
+  }, [])
 
-    return api.get('/jobs', { params })
+  const fetchBrowseResults = useCallback((searchFilters, nextPage = 1) => {
+    const requestId = ++requestSequence.current
+    const params = Object.fromEntries(
+      Object.entries(searchFilters).filter(([, value]) => value.trim()),
+    )
+    params.page = nextPage
+    params.limit = 20
+    setIsLoading(true)
+    setErrorMessage('')
+    api.get('/jobs', { params })
       .then((response) => {
+        if (requestId !== requestSequence.current) return
         setJobs(Array.isArray(response.data.jobs) ? response.data.jobs : [])
-        setPagination(response.data.pagination || {
-          page,
-          limit: pageSize,
-          totalJobs: 0,
-          totalPages: 0,
-        })
-        if (!Object.values(nextFilters).some((value) => value.trim())) {
-          setAvailableJobCount(response.data.pagination?.totalJobs ?? 0)
-        }
+        setPage(response.data.pagination?.page || nextPage)
+        setTotalPages(Math.max(1, response.data.pagination?.totalPages || 1))
       })
       .catch((error) => {
+        if (requestId !== requestSequence.current) return
         setJobs([])
-        setPagination({ page, limit: pageSize, totalJobs: 0, totalPages: 0 })
-        setErrorMessage(getRequestErrorMessage(error, 'Unable to load jobs.'))
+        setTotalPages(1)
+        setErrorMessage(getRequestErrorMessage(error, 'Unable to load job listings.'))
       })
-      .finally(() => setIsLoading(false))
+      .finally(() => {
+        if (requestId === requestSequence.current) setIsLoading(false)
+      })
   }, [])
 
   useEffect(() => {
-    fetchJobs(initialFilters, 1)
-  }, [fetchJobs])
+    if (isFictionalJobsDemoEnabled) return
+    fetchRecommendations()
+  }, [fetchRecommendations])
 
-  const hasActiveFilters = Object.values(appliedFilters).some((value) => value.trim())
-  const hasJobsInDatabase = availableJobCount === null
-    ? pagination.totalJobs > 0
-    : availableJobCount > 0
+  const handleRetry = () => {
+    if (activeView === 'browse') {
+      fetchBrowseResults(filters, page)
+    } else {
+      setIsLoading(true)
+      setErrorMessage('')
+      fetchRecommendations()
+    }
+  }
+
+  const handleRecommendationView = () => {
+    setActiveView('recommended')
+    setIsLoading(true)
+    setErrorMessage('')
+    fetchRecommendations()
+  }
+
+  const handleBrowseView = () => {
+    setActiveView('browse')
+    fetchBrowseResults(filters)
+  }
+
+  const handleSearch = (event) => {
+    event.preventDefault()
+    fetchBrowseResults(filters)
+  }
 
   const handleFilterChange = (event) => {
     const { name, value } = event.target
     setFilters((current) => ({ ...current, [name]: value }))
   }
 
-  const handleSearch = (event) => {
-    event.preventDefault()
-    setAppliedFilters(filters)
-    setIsLoading(true)
-    setErrorMessage('')
-    fetchJobs(filters, 1)
-  }
-
-  const handleClearFilters = () => {
-    setFilters(initialFilters)
-    setAppliedFilters(initialFilters)
-    setIsLoading(true)
-    setErrorMessage('')
-    fetchJobs(initialFilters, 1)
-  }
-
-  const handlePageChange = (page) => {
-    setIsLoading(true)
-    setErrorMessage('')
-    fetchJobs(appliedFilters, page)
-    window.scrollTo({ top: 0, behavior: 'smooth' })
-  }
-
-  const handleRetry = () => {
-    setIsLoading(true)
-    setErrorMessage('')
-    fetchJobs(appliedFilters, pagination.page)
-  }
+  const internships = jobs.filter((job) => (
+    job.resumeSkillMatch?.status === 'available'
+    && job.resumeSkillMatch.matchPercentage > 0
+    && (/intern/i.test(`${job.title} ${job.employmentType}`))
+  ))
+  const fresherJobs = jobs.filter((job) => (
+    job.resumeSkillMatch?.status === 'available'
+    && job.resumeSkillMatch.matchPercentage > 0
+    && !/intern/i.test(`${job.title} ${job.employmentType}`)
+    && /fresher|entry[ -]?level|graduate|0\s*[-–]\s*1\s*years?/i.test(
+      `${job.title} ${job.experienceLevel} ${job.employmentType}`,
+    )
+  ))
+  const canRecommend = resumeStatus === 'analysis-ready'
 
   return (
     <JobsLayout>
       <header className="dashboard-header">
         <div>
           <p className="eyebrow">Career opportunities</p>
-          <h1>Find your next opportunity</h1>
-          <p className="jobs-intro">Search active listings by role, location, skills, and more.</p>
+          <h1>{activeView === 'browse' ? 'Explore verified jobs' : 'Opportunities matched to you'}</h1>
+          <p className="jobs-intro">{isFictionalJobsDemoEnabled
+            ? 'Fictional development samples for checking the job-card layout only.'
+            : 'Explore current listings from employer career feeds or see opportunities ranked against your analyzed resume.'}</p>
         </div>
       </header>
 
-      <form className="job-filter-panel profile-panel" onSubmit={handleSearch}>
-        <div className="job-filter-grid">
-          <label className="job-filter-keyword">
-            Keyword
-            <input
-              name="keyword"
-              value={filters.keyword}
-              onChange={handleFilterChange}
-              placeholder="Job title, company, or description"
-            />
-          </label>
-          <label>
-            Location
-            <input name="location" value={filters.location} onChange={handleFilterChange} placeholder="e.g. Remote" />
-          </label>
-          <label>
-            Required skills
-            <input name="skills" value={filters.skills} onChange={handleFilterChange} placeholder="e.g. React, SQL" />
-            <span className="filter-hint">Separate multiple skills with commas.</span>
-          </label>
-          <label>
-            Experience level
-            <input name="experienceLevel" value={filters.experienceLevel} onChange={handleFilterChange} placeholder="e.g. Entry-level" />
-          </label>
-          <label>
-            Employment type
-            <input name="employmentType" value={filters.employmentType} onChange={handleFilterChange} placeholder="e.g. Full-time" />
-          </label>
+      {isFictionalJobsDemoEnabled ? (
+        <section className="fictional-demo-section" aria-label="Fictional job-card demo">
+          <div className="fictional-demo-banner" role="alert">
+            FICTIONAL DEMO — NOT A REAL JOB; NOT VERIFIED
+          </div>
+          <div className="job-list">
+            {demoJobs.map((job) => (
+              <article className="job-card" key={job.id}>
+                <div className="job-card-heading">
+                  <div>
+                    <p className="job-company">{job.companyName}</p>
+                    <h2>{job.title}</h2>
+                  </div>
+                </div>
+                <div className="job-meta">
+                  <span>{job.location}</span>
+                  <span>{job.experienceLevel}</span>
+                  <span>{job.employmentType}</span>
+                </div>
+                <p className="job-description">{job.description}</p>
+                <ul className="job-skill-list" aria-label="Fictional sample skills">
+                  {job.requiredSkills.map((skill) => <li key={skill}>{skill}</li>)}
+                </ul>
+                <div className="job-card-footer">
+                  <span className="job-source">Fictional sample data — no application link</span>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : (
+        <>
+      <nav className="jobs-view-tabs" aria-label="Job views">
+        <button
+          type="button"
+          className={`jobs-view-tab${activeView === 'recommended' ? ' active' : ''}`}
+          aria-pressed={activeView === 'recommended'}
+          onClick={handleRecommendationView}
+        >
+          Recommended for you
+        </button>
+        <button
+          type="button"
+          className={`jobs-view-tab${activeView === 'browse' ? ' active' : ''}`}
+          aria-pressed={activeView === 'browse'}
+          onClick={handleBrowseView}
+        >
+          Browse all jobs
+        </button>
+      </nav>
+
+      {activeView === 'browse' && (
+        <form className="job-search-panel" onSubmit={handleSearch}>
+          <div className="job-search-fields">
+            <label>
+              Search jobs
+              <input name="keyword" value={filters.keyword} onChange={handleFilterChange} placeholder="Title, company, or keyword" />
+            </label>
+            <label>
+              Location
+              <input name="location" value={filters.location} onChange={handleFilterChange} placeholder="City or remote" />
+            </label>
+            <label>
+              Required skills
+              <input name="skills" value={filters.skills} onChange={handleFilterChange} placeholder="Comma-separated skills" />
+            </label>
+            <label>
+              Experience
+              <input name="experienceLevel" value={filters.experienceLevel} onChange={handleFilterChange} placeholder="e.g. Entry level" />
+            </label>
+            <label>
+              Job type
+              <input name="employmentType" value={filters.employmentType} onChange={handleFilterChange} placeholder="e.g. Full-time" />
+            </label>
+          </div>
+          <div className="job-search-actions">
+            <button className="primary-button small-button" type="submit">Search jobs</button>
+            <button
+              className="secondary-button small-button"
+              type="button"
+              onClick={() => {
+                const clearedFilters = {
+                  keyword: '',
+                  location: '',
+                  skills: '',
+                  experienceLevel: '',
+                  employmentType: '',
+                }
+                setFilters(clearedFilters)
+                fetchBrowseResults(clearedFilters)
+              }}
+            >
+              Clear filters
+            </button>
+          </div>
+        </form>
+      )}
+
+      {!isLoading && !errorMessage && resumeStatus !== 'analysis-ready' && (
+        <div className="resume-recommendation-notice" role="status">
+          <p>{resumeStatus === 'missing'
+            ? 'Upload and analyze a resume to get personalized recommendations. You can still explore verified opportunities below.'
+            : 'Your current resume analysis is not ready yet. Recommendations will be personalized once analysis completes.'}</p>
+          <Link className="secondary-button small-button" to="/resume">{resumeStatus === 'missing' ? 'Analyze resume' : 'View resume status'}</Link>
         </div>
-        <div className="job-filter-actions">
-          <button className="primary-button" type="submit" disabled={isLoading}>Search jobs</button>
-          <button className="secondary-button" type="button" onClick={handleClearFilters} disabled={isLoading}>
-            Clear filters
-          </button>
-        </div>
-      </form>
+      )}
 
       <section className="jobs-results" aria-live="polite" aria-busy={isLoading}>
         <div className="jobs-results-heading">
-          <h2>Job listings</h2>
-          {!isLoading && hasJobsInDatabase && (
-            <span>{pagination.totalJobs} {pagination.totalJobs === 1 ? 'job' : 'jobs'} found</span>
+          <h2>{activeView === 'browse' ? 'Job listings' : 'Recommended for You'}</h2>
+          {!isLoading && jobs.length > 0 && (
+            <span>{activeView === 'browse' ? `${jobs.length} listings on this page` : `${jobs.length} ${jobs.length === 1 ? 'opportunity' : 'opportunities'}`}</span>
           )}
         </div>
-        {isLoading && <div className="empty-state"><p>Loading job listings...</p></div>}
+        {isLoading && <div className="empty-state"><p>{activeView === 'browse' ? 'Searching job listings...' : 'Loading job listings...'}</p></div>}
         {!isLoading && errorMessage && (
           <div className="error-banner" role="alert">
             <p>{errorMessage}</p>
@@ -244,51 +344,90 @@ function JobsPage() {
           </div>
         )}
         {!isLoading && !errorMessage && jobs.length === 0 && (
-          <div className="empty-state jobs-empty-state">
-            <h3>
-              {!hasJobsInDatabase
-                ? 'No job listings yet'
-                : hasActiveFilters
-                  ? 'No jobs match these filters'
-                  : 'No job listings yet'}
-            </h3>
-            <p>
-              {!hasJobsInDatabase
-                ? 'There are currently no active listings to search. Please check back later.'
-                : hasActiveFilters
-                ? 'Try adjusting your search criteria and search again.'
-                : 'There are currently no active listings. Please check back later.'}
-            </p>
-          </div>
+          activeView === 'browse'
+            ? <div className="empty-state jobs-empty-state"><h3>No listings match your search</h3><p>Try broadening or clearing your filters to see more currently available opportunities.</p></div>
+            : <div className="empty-state jobs-empty-state">
+              <h3>No active verified jobs are available</h3>
+              <p>
+                There are no active listings verified by an employer or college placement office right now.
+                Please check back as new opportunities are verified.
+              </p>
+            </div>
         )}
         {!isLoading && !errorMessage && jobs.length > 0 && (
           <>
             <div className="job-list">
-              {jobs.map((job) => <JobCard key={job._id} job={job} />)}
+              {jobs.map((job) => <JobCard key={job._id} job={job} showMatch />)}
             </div>
-            {pagination.totalPages > 1 && (
-              <nav className="job-pagination" aria-label="Job listing pages">
-                <button
-                  className="secondary-button"
-                  type="button"
-                  onClick={() => handlePageChange(pagination.page - 1)}
-                  disabled={isLoading || pagination.page <= 1}
-                >
-                  Previous
-                </button>
-                <span>Page {pagination.page} of {pagination.totalPages}</span>
-                <button
-                  className="secondary-button"
-                  type="button"
-                  onClick={() => handlePageChange(pagination.page + 1)}
-                  disabled={isLoading || pagination.page >= pagination.totalPages}
-                >
-                  Next
-                </button>
-              </nav>
-            )}
           </>
         )}
+        {!isLoading && !errorMessage && activeView === 'browse' && totalPages > 1 && (
+          <nav className="job-pagination" aria-label="Job listing pages">
+            <button
+              className="secondary-button small-button"
+              type="button"
+              disabled={page <= 1}
+              onClick={() => fetchBrowseResults(filters, page - 1)}
+            >
+              Previous
+            </button>
+            <span>Page {page} of {totalPages}</span>
+            <button
+              className="secondary-button small-button"
+              type="button"
+              disabled={page >= totalPages}
+              onClick={() => fetchBrowseResults(filters, page + 1)}
+            >
+              Next
+            </button>
+          </nav>
+        )}
+      </section>
+      {activeView === 'recommended' && canRecommend && !isLoading && !errorMessage && (
+        <>
+          {internships.length > 0 && (
+            <section className="jobs-results recommendation-category">
+              <div className="jobs-results-heading"><h2>Relevant Internships</h2><span>{internships.length} matches</span></div>
+              <div className="job-list">{internships.map((job) => <JobCard key={`internship-${job._id}`} job={job} showMatch />)}</div>
+            </section>
+          )}
+          {fresherJobs.length > 0 && (
+            <section className="jobs-results recommendation-category">
+              <div className="jobs-results-heading"><h2>Fresher Jobs</h2><span>{fresherJobs.length} matches</span></div>
+              <div className="job-list">{fresherJobs.map((job) => <JobCard key={`fresher-${job._id}`} job={job} showMatch />)}</div>
+            </section>
+          )}
+        </>
+      )}
+        </>
+      )}
+      <section className="official-careers-section" aria-labelledby="official-careers-heading">
+        <div className="official-careers-heading">
+          <div>
+            <p className="eyebrow">Explore directly with employers</p>
+            <h2 id="official-careers-heading">Official Company Careers</h2>
+          </div>
+          <p className="official-careers-notice">
+            External website. The link opens in a new tab, and you will leave CareerLens.
+          </p>
+        </div>
+        {officialCompanyCareers.map(({ company, description, url }) => (
+          <article className="official-career-card" key={company}>
+            <div className="official-career-copy">
+              <h3>{company}</h3>
+              <p>{description}</p>
+            </div>
+            <a
+              className="primary-button small-button official-career-link"
+              href={url}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Visit Official Careers
+              <span className="visually-hidden"> for {company} (opens in a new tab; leaves CareerLens)</span>
+            </a>
+          </article>
+        ))}
       </section>
     </JobsLayout>
   )

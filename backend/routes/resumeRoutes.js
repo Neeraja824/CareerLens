@@ -28,20 +28,24 @@ const storage = multer.diskStorage({
 })
 
 const fileFilter = (_request, file, callback) => {
-  const allowedTypes = [
-    'application/pdf',
-    'application/msword',
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  ]
-  const normalizedName = (file.originalname || '').toLowerCase()
-  const isAllowedByExtension = normalizedName.endsWith('.pdf') || normalizedName.endsWith('.doc') || normalizedName.endsWith('.docx')
+  const mimeTypeByExtension = {
+    '.pdf': 'application/pdf',
+    '.doc': 'application/msword',
+    '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  }
+  const extension = path.extname(file.originalname || '').toLowerCase()
+  const expectedMimeType = Object.hasOwn(mimeTypeByExtension, extension)
+    ? mimeTypeByExtension[extension]
+    : null
+  const normalizedMimeType = (file.mimetype || '').toLowerCase()
+  const isMimeTypeRecognized = Object.values(mimeTypeByExtension).includes(normalizedMimeType)
 
-  if (allowedTypes.includes(file.mimetype) || isAllowedByExtension) {
+  if (expectedMimeType && (!isMimeTypeRecognized || normalizedMimeType === expectedMimeType)) {
     callback(null, true)
     return
   }
 
-  callback(new Error('Please upload a PDF or DOCX file.'))
+  callback(new Error('Please upload a PDF, DOC, or DOCX file.'))
 }
 
 const upload = multer({
@@ -69,7 +73,7 @@ router.use((error, _request, response, _next) => {
     }
   }
 
-  if (error && error.message === 'Please upload a PDF or DOCX file.') {
+  if (error && error.message === 'Please upload a PDF, DOC, or DOCX file.') {
     return response.status(400).json({
       success: false,
       message: error.message,

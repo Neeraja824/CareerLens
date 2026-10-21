@@ -1,0 +1,35 @@
+{
+  "jobs": [
+    {
+      "title": "Systems Development Engineer Intern – 2027",
+      "companyName": "Amazon",
+      "description": "Build innovative, mission-critical software applications and tools. Responsibilities include contributing to the design, architecture, development, delivery, and support of large-scale, multi-tiered, distributed applications and tools in a fast-paced agile environment.",
+      "requiredSkills": [
+        "Java",
+        "C",
+        "C++",
+        "Python",
+        "Object-oriented design",
+        "Operating systems",
+        "Algorithm design",
+        "Data structures",
+        "Complexity analysis",
+        "Distributed systems",
+        "Multi-tiered systems",
+        "Relational databases",
+        "Linear programming",
+        "Nonlinear optimization"
+      ],
+      "location": "India (including Bengaluru, Chennai, Hyderabad, and Gurugram)",
+      "experienceLevel": "Intern",
+      "employmentType": "Full-time internship",
+      "externalApplicationUrl": "https://www.amazon.jobs/applicant/jobs/10498158/apply",
+      "sourceName": "Amazon.jobs",
+      "sourceUrl": "https://www.amazon.jobs/en/jobs/10498158/systems-development-engineer-intern-2027",
+      "verifiedAt": "2026-10-21",
+      "verifiedBy": "employer",
+      "sourceListingId": "10498158",
+      "isActive": false
+    }
+  ]
+}

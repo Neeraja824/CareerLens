@@ -9,12 +9,16 @@ const resumeUploadsDirectory = path.resolve(process.cwd(), 'uploads', 'resumes')
 
 fs.mkdirSync(resumeUploadsDirectory, { recursive: true })
 
-const databaseConnected = await connectDatabase()
-
 app.listen(port, () => {
-  if (databaseConnected) {
-    console.log(`CareerLens AI backend listening on http://localhost:${port}`)
-  } else {
-    console.warn(`CareerLens AI backend listening on http://localhost:${port} without MongoDB connection. Authentication and resume flows will fail until MongoDB Atlas is reachable.`)
-  }
+  console.log(`CareerLens AI backend listening on http://localhost:${port}`)
 })
+
+connectDatabase()
+  .then((databaseConnected) => {
+    if (!databaseConnected) {
+      console.warn('MongoDB is unavailable. Database-dependent endpoints will return an error until a connection is available.')
+    }
+  })
+  .catch(() => {
+    console.error('MongoDB connection initialization failed unexpectedly.')
+  })

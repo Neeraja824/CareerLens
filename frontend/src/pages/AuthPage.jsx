@@ -89,8 +89,21 @@ function AuthPage({ mode = 'login' }) {
       })
       navigate('/dashboard')
     } catch (error) {
+      const status = error.response?.status
+      const serverMessage = error.response?.data?.message
+      const isRetryableStatus = status === 408 || status === 429 || status >= 500
+      const isTimeout = error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT'
+      const formError = serverMessage
+        ? `${serverMessage}${isRetryableStatus ? ' Please try again shortly.' : ''}`
+        : isTimeout
+          ? 'Login request timed out. Please try again.'
+          : !error.response
+            ? 'Unable to reach the login service. Check your connection and try again.'
+            : isRetryableStatus
+              ? 'Login service is temporarily unavailable. Please try again shortly.'
+              : 'Login failed. Please try again.'
       setLoginErrors({
-        form: error.response?.data?.message || 'Login failed. Please try again.',
+        form: formError,
       })
     } finally {
       setIsSubmitting(false)

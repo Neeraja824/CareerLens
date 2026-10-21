@@ -35,19 +35,16 @@ const jobSchema = new mongoose.Schema(
     },
     location: {
       type: String,
-      required: true,
       trim: true,
       maxlength: 160,
     },
     experienceLevel: {
       type: String,
-      required: true,
       trim: true,
       maxlength: 80,
     },
     employmentType: {
       type: String,
-      required: true,
       trim: true,
       maxlength: 80,
     },
@@ -77,6 +74,28 @@ const jobSchema = new mongoose.Schema(
         message: 'Source URL must use HTTP or HTTPS.',
       },
     },
+    sourceCareersUrl: {
+      type: String,
+      trim: true,
+      maxlength: 2048,
+      validate: {
+        validator: (value) => value === undefined || value === null || isHttpUrl(value),
+        message: 'Source careers URL must use HTTP or HTTPS.',
+      },
+    },
+    sourceProvider: {
+      type: String,
+      enum: ['greenhouse', 'lever'],
+    },
+    sourceCompany: {
+      type: String,
+      trim: true,
+      maxlength: 160,
+    },
+    lastCheckedAt: {
+      type: Date,
+      default: null,
+    },
     verifiedAt: {
       type: Date,
       default: null,
@@ -84,6 +103,10 @@ const jobSchema = new mongoose.Schema(
     verifiedBy: {
       type: String,
       enum: ['college_placement_office', 'employer'],
+    },
+    availabilityConfirmedAt: {
+      type: Date,
+      default: null,
     },
     sourceListingId: {
       type: String,
@@ -96,8 +119,15 @@ const jobSchema = new mongoose.Schema(
     },
     postingDate: {
       type: Date,
-      required: true,
-      default: Date.now,
+      default: null,
+    },
+    sourceFirstPublishedAt: {
+      type: Date,
+      default: null,
+    },
+    sourceUpdatedAt: {
+      type: Date,
+      default: null,
     },
     expiryDate: {
       type: Date,
@@ -108,6 +138,12 @@ const jobSchema = new mongoose.Schema(
       default: true,
       index: true,
     },
+    salary: {
+      min: { type: Number, min: 0 },
+      max: { type: Number, min: 0 },
+      currency: { type: String, trim: true, maxlength: 8 },
+      interval: { type: String, enum: ['hour', 'day', 'week', 'month', 'year'] },
+    },
   },
   {
     timestamps: true,
@@ -117,6 +153,14 @@ const jobSchema = new mongoose.Schema(
 
 jobSchema.index({ isActive: 1, expiryDate: 1, postingDate: -1 })
 jobSchema.index({ importKey: 1 }, { unique: true, sparse: true, name: 'unique_job_import_key' })
+jobSchema.index(
+  { sourceProvider: 1, sourceCompany: 1, sourceListingId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { sourceProvider: { $in: ['greenhouse', 'lever'] } },
+    name: 'unique_official_source_job',
+  },
+)
 
 const Job = mongoose.models.Job || mongoose.model('Job', jobSchema)
 

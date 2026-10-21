@@ -136,8 +136,17 @@ test('job listing applies active and unexpired criteria, filters, and pagination
   })
 
   assert.equal(capturedFilter.isActive, true)
+  assert.ok(capturedFilter.availabilityConfirmedAt.$gte instanceof Date)
+  assert.ok(capturedFilter.availabilityConfirmedAt.$lte instanceof Date)
+  assert.equal(
+    capturedFilter.availabilityConfirmedAt.$lte.getTime()
+      - capturedFilter.availabilityConfirmedAt.$gte.getTime(),
+    24 * 60 * 60 * 1000,
+  )
   assert.ok(capturedFilter.$or.some((condition) => condition.expiryDate === null))
   assert.equal(capturedFilter.$or.some((condition) => condition.expiryDate?.$gte instanceof Date), true)
+  assert.deepEqual(capturedFilter.verifiedAt, { $ne: null })
+  assert.deepEqual(capturedFilter.verifiedBy, { $in: ['college_placement_office', 'employer'] })
   assert.equal(capturedFilter.$and[0].$or[0].title.source, 'C\\+\\+')
   assert.equal(capturedFilter.location.$options, 'i')
   assert.equal(capturedFilter.experienceLevel.$options, 'i')
@@ -151,11 +160,17 @@ test('job listing applies active and unexpired criteria, filters, and pagination
 })
 
 test('job listing excludes inactive and expired records', async () => {
+  const now = new Date()
   const records = [
-    { _id: 'active-no-expiry', isActive: true, expiryDate: null },
-    { _id: 'active-future-expiry', isActive: true, expiryDate: new Date(Date.now() + 86400000) },
-    { _id: 'inactive-no-expiry', isActive: false, expiryDate: null },
-    { _id: 'active-expired', isActive: true, expiryDate: new Date(Date.now() - 86400000) },
+    { _id: 'active-no-expiry', isActive: true, availabilityConfirmedAt: new Date(now.getTime() - 60_000), expiryDate: null, verifiedAt: now, verifiedBy: 'employer' },
+    { _id: 'active-future-expiry', isActive: true, availabilityConfirmedAt: now, expiryDate: new Date(now.getTime() + 86400000), verifiedAt: now, verifiedBy: 'college_placement_office' },
+    { _id: 'active-unverified', isActive: true, availabilityConfirmedAt: now, expiryDate: null, verifiedAt: null, verifiedBy: 'employer' },
+    { _id: 'active-unapproved-source', isActive: true, availabilityConfirmedAt: now, expiryDate: null, verifiedAt: now, verifiedBy: 'job-board' },
+    { _id: 'inactive-no-expiry', isActive: false, availabilityConfirmedAt: now, expiryDate: null, verifiedAt: now, verifiedBy: 'employer' },
+    { _id: 'active-expired', isActive: true, availabilityConfirmedAt: now, expiryDate: new Date(now.getTime() - 86400000), verifiedAt: now, verifiedBy: 'employer' },
+    { _id: 'active-stale-confirmation', isActive: true, availabilityConfirmedAt: new Date(now.getTime() - 25 * 60 * 60 * 1000), expiryDate: null, verifiedAt: now, verifiedBy: 'employer' },
+    { _id: 'active-missing-confirmation', isActive: true, expiryDate: null, verifiedAt: now, verifiedBy: 'employer' },
+    { _id: 'active-future-confirmation', isActive: true, availabilityConfirmedAt: new Date(now.getTime() + 60_000), expiryDate: null, verifiedAt: now, verifiedBy: 'employer' },
   ]
   let matchedRecords
   const queryChain = {
@@ -171,8 +186,14 @@ test('job listing excludes inactive and expired records', async () => {
         (condition) => condition.expiryDate?.$gte instanceof Date,
       ).expiryDate.$gte
       const allowsNoExpiry = filter.$or.some((condition) => condition.expiryDate === null)
+      const confirmationRange = filter.availabilityConfirmedAt
       matchedRecords = records.filter((job) => (
         job.isActive === filter.isActive
+        && job.availabilityConfirmedAt instanceof Date
+        && job.availabilityConfirmedAt >= confirmationRange.$gte
+        && job.availabilityConfirmedAt <= confirmationRange.$lte
+        && job.verifiedAt !== null
+        && filter.verifiedBy.$in.includes(job.verifiedBy)
         && (job.expiryDate === null ? allowsNoExpiry : job.expiryDate >= expiryMinimum)
       ))
       return queryChain
@@ -227,6 +248,8 @@ test('job lookup returns an active, unexpired job and rejects invalid or missing
   assert.equal(capturedFilter._id, jobId)
   assert.equal(capturedFilter.isActive, true)
   assert.ok(capturedFilter.$or.some((condition) => condition.expiryDate?.$gte instanceof Date))
+  assert.deepEqual(capturedFilter.verifiedAt, { $ne: null })
+  assert.deepEqual(capturedFilter.verifiedBy, { $in: ['college_placement_office', 'employer'] })
 
   let wasQueried = false
   await withJobStubs({

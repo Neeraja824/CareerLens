@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "node --watch server.js",
     "start": "node server.js",
-    "import:verified-jobs": "node scripts/importVerifiedJobs.js"
+    "import:verified-jobs": "node scripts/importVerifiedJobs.js",
+    "inspect:official-job-feeds": "node scripts/inspectOfficialJobFeeds.js",
+    "sync:official-jobs": "node scripts/syncOfficialJobs.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.0",

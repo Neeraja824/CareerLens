@@ -1,5 +1,6 @@
 import cors from 'cors'
 import express from 'express'
+import mongoose from 'mongoose'
 import authRoutes from './routes/authRoutes.js'
 import jobRoutes from './routes/jobRoutes.js'
 import resumeRoutes from './routes/resumeRoutes.js'
@@ -25,7 +26,17 @@ app.options('*', cors(corsOptions))
 app.use(express.json({ limit: '1mb' }))
 
 app.get('/api/health', (_request, response) => {
-  response.json({ success: true, message: 'CareerLens AI backend is running' })
+  const databaseReady = mongoose.connection.readyState === 1
+  const statusCode = databaseReady ? 200 : 503
+
+  response.status(statusCode).json({
+    success: databaseReady,
+    server: 'available',
+    database: databaseReady ? 'ready' : 'unavailable',
+    message: databaseReady
+      ? 'CareerLens AI backend and database are ready.'
+      : 'CareerLens AI backend is running, but the database is unavailable.',
+  })
 })
 
 app.use('/api/auth', authRoutes)
