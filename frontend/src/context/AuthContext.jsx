@@ -1,5 +1,6 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import api from '../services/api.js'
+import { refreshCurrentUser } from './authRefresh.js'
 
 const AuthContext = createContext(null)
 
@@ -7,6 +8,7 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [token, setToken] = useState(localStorage.getItem('careerlens-token') || '')
   const [loading, setLoading] = useState(true)
+  const hasInitialized = useRef(false)
 
   const logout = useCallback(() => {
     localStorage.removeItem('careerlens-token')
@@ -38,19 +40,18 @@ export function AuthProvider({ children }) {
       return null
     }
 
-    try {
-      const response = await api.get('/auth/me')
-      setUser(response.data.student)
-      return response.data.student
-    } catch (error) {
-      logout()
-      return null
-    } finally {
-      setLoading(false)
-    }
+    return refreshCurrentUser({
+      getCurrentUser: () => api.get('/auth/me'),
+      setUser,
+      logout,
+      setLoading,
+    })
   }, [logout, token])
 
   useEffect(() => {
+    if (hasInitialized.current) return
+
+    hasInitialized.current = true
     refreshUser()
   }, [refreshUser])
 

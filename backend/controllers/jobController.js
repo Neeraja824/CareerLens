@@ -101,14 +101,14 @@ function buildJobListFilter(filters) {
 
   if (filters.keyword) {
     const keyword = new RegExp(escapeRegularExpression(filters.keyword), 'i')
-    filter.$and = [{
+    filter.$and.push({
       $or: [
         { title: keyword },
         { companyName: keyword },
         { description: keyword },
         { requiredSkills: keyword },
       ],
-    }]
+    })
   }
 
   if (filters.location) {

@@ -180,6 +180,7 @@ button { cursor: pointer; }
 .job-search-actions { display: flex; gap: 10px; margin-top: 16px; }
 .job-verification { margin-top: 12px; font-size: 0.82rem; font-weight: 800; }
 .job-verification-official { color: #186451; }
+.job-verification-reviewed { color: #385d89; }
 .job-verification-metadata { color: #8a5b12; }
 .job-verification-unavailable { color: var(--muted); }
 .job-salary { color: #186451 !important; background: #edf8f4 !important; }

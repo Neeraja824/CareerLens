@@ -3,7 +3,12 @@ import assert from 'node:assert/strict'
 import { fetchGreenhouseJobs } from '../services/jobSources/greenhouse.js'
 import { fetchLeverJobs } from '../services/jobSources/lever.js'
 import { sourceDate, sourceSalary } from '../services/jobSources/common.js'
-import { parseJobSourceConfig, syncJobSources } from '../services/jobSyncService.js'
+import {
+  applyListingExclusions,
+  parseJobSourceConfig,
+  syncJobSources,
+} from '../services/jobSyncService.js'
+import { NETLIFY_ALLOWED_LISTING_IDS } from '../utils/netlifyJobPolicy.js'
 import { runFeedInspection } from '../scripts/inspectOfficialJobFeeds.js'
 import { runOfficialJobSync } from '../scripts/syncOfficialJobs.js'
 import Job from '../models/job.model.js'
@@ -89,6 +94,35 @@ test('source configuration accepts supported providers and rejects unsafe or dup
     greenhouseSource({ sourceCompany: 'example org' }),
   ])), /duplicates/)
   assert.deepEqual(parseJobSourceConfig(undefined), [])
+})
+
+test('Netlify Greenhouse feed is limited to reviewed role IDs and excludes the talent community', () => {
+  const source = greenhouseSource({
+    sourceCompany: 'Netlify',
+    boardToken: 'netlify',
+  })
+  const listings = [
+    ...[...NETLIFY_ALLOWED_LISTING_IDS].map((id) => ({ sourceListingId: id })),
+    { sourceListingId: '4224129002' },
+    { sourceListingId: 'unreviewed-id' },
+  ]
+
+  const result = applyListingExclusions(source, listings)
+  assert.deepEqual(
+    result.included.map(({ sourceListingId }) => sourceListingId).sort(),
+    [...NETLIFY_ALLOWED_LISTING_IDS].sort(),
+  )
+  assert.deepEqual(
+    result.excluded.map(({ sourceListingId }) => sourceListingId).sort(),
+    ['4224129002', 'unreviewed-id'],
+  )
+  assert.equal(
+    applyListingExclusions(
+      greenhouseSource({ provider: 'lever', boardToken: 'netlify' }),
+      listings,
+    ).included.length,
+    listings.length,
+  )
 })
 
 test('Greenhouse adapter maps only supplied job details and requires complete source payloads', async () => {
@@ -196,6 +230,23 @@ test('job schema allows optional source details while retaining required job con
     sourceUpdatedAt: new Date('2026-10-02T19:03:23.000Z'),
   })
   assert.equal(job.validateSync(), undefined)
+  const reviewedJob = new Job({
+    title: 'Software Engineer',
+    companyName: 'Netlify',
+    description: 'Build software.',
+    externalApplicationUrl: 'https://job-boards.greenhouse.io/netlify/jobs/8806100002',
+    sourceName: 'Greenhouse employer career feed',
+    sourceUrl: 'https://job-boards.greenhouse.io/netlify/jobs/8806100002',
+    sourceProvider: 'greenhouse',
+    sourceCompany: 'Netlify',
+    sourceListingId: '8806100002',
+    sourceCareersUrl: 'https://www.netlify.com/careers/',
+    sourceReviewStatus: 'approved',
+    sourceReviewAt: new Date(),
+    sourceReviewBy: 'authorized-reviewer',
+    sourceReviewAvailability: 'available',
+  })
+  assert.equal(reviewedJob.validateSync(), undefined)
   assert.equal(new Job({
     title: 'Software Engineer',
     companyName: 'Example Org',
@@ -481,7 +532,16 @@ test('new feed listings are inserted inactive and without verification or availa
 
   const [, update] = JobModel.writes.updates[0]
   assert.equal(update.$setOnInsert.isActive, false)
-  for (const field of ['verifiedAt', 'verifiedBy', 'availabilityConfirmedAt', 'isActive']) {
+  for (const field of [
+    'verifiedAt',
+    'verifiedBy',
+    'sourceReviewStatus',
+    'sourceReviewAt',
+    'sourceReviewBy',
+    'sourceReviewAvailability',
+    'availabilityConfirmedAt',
+    'isActive',
+  ]) {
     assert.equal(Object.hasOwn(update.$set, field), false)
     assert.equal(Object.hasOwn(update.$unset || {}, field), false)
   }

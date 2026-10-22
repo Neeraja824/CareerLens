@@ -104,6 +104,23 @@ const jobSchema = new mongoose.Schema(
       type: String,
       enum: ['college_placement_office', 'employer'],
     },
+    sourceReviewStatus: {
+      type: String,
+      enum: ['approved', 'rejected'],
+    },
+    sourceReviewAt: {
+      type: Date,
+      default: null,
+    },
+    sourceReviewBy: {
+      type: String,
+      trim: true,
+      maxlength: 160,
+    },
+    sourceReviewAvailability: {
+      type: String,
+      enum: ['available', 'unavailable'],
+    },
     availabilityConfirmedAt: {
       type: Date,
       default: null,

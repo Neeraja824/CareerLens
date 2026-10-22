@@ -1,12 +1,5 @@
 import { Link } from 'react-router-dom'
-
-function formatDate(value) {
-  if (!value) return ''
-  const date = new Date(value)
-  return Number.isNaN(date.getTime())
-    ? ''
-    : date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
-}
+import { verificationDetails } from '../../utils/jobVerification.js'
 
 function formatSalary(salary) {
   if (
@@ -27,33 +20,12 @@ function formatSalary(salary) {
   return `${formatter.format(salary.min)}–${formatter.format(salary.max)} / ${salary.interval}`
 }
 
-function verificationDetails(job) {
-  if (
-    ['greenhouse', 'lever'].includes(job.sourceProvider)
-    && job.sourceCompany
-    && job.lastCheckedAt
-  ) {
-    const lastCheckedAt = formatDate(job.lastCheckedAt)
-    if (lastCheckedAt) {
-      const provider = job.sourceProvider[0].toUpperCase() + job.sourceProvider.slice(1)
-      return {
-        label: `Official ${provider} feed · checked ${lastCheckedAt}`,
-        type: 'official',
-      }
-    }
-  }
-  if (job.verifiedBy) {
-    const authority = job.verifiedBy === 'employer'
-      ? 'employer'
-      : job.verifiedBy === 'college_placement_office'
-        ? 'college placement office'
-        : 'source'
-    return {
-      label: `Verification metadata: ${authority} (not independently authenticated)`,
-      type: 'metadata',
-    }
-  }
-  return { label: 'Source verification unavailable', type: 'unavailable' }
+function formatDate(value) {
+  if (!value) return ''
+  const date = new Date(value)
+  return Number.isNaN(date.getTime())
+    ? ''
+    : date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
 }
 
 function JobCard({ job, showMatch = false }) {

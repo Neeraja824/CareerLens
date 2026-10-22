@@ -1,4 +1,5 @@
 import { createImportKey } from '../utils/importJobIdentity.js'
+import { NETLIFY_ALLOWED_LISTING_IDS } from '../utils/netlifyJobPolicy.js'
 import { fetchGreenhouseJobs } from './jobSources/greenhouse.js'
 import { fetchLeverJobs } from './jobSources/lever.js'
 
@@ -87,9 +88,15 @@ export function applyListingExclusions(source, listings) {
   const excludedIds = new Set((source.excludeListingIds || []).map((id) => id.trim()))
   const included = []
   const excluded = []
+  const isNetlifyGreenhouseSource = source.provider === 'greenhouse'
+    && source.boardToken?.toLocaleLowerCase('en-US') === 'netlify'
 
   for (const listing of listings) {
-    if (excludedIds.has(String(listing.sourceListingId))) {
+    const listingId = String(listing.sourceListingId)
+    if (
+      excludedIds.has(listingId)
+      || (isNetlifyGreenhouseSource && !NETLIFY_ALLOWED_LISTING_IDS.includes(listingId))
+    ) {
       excluded.push(listing)
     } else {
       included.push(listing)

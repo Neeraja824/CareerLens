@@ -118,7 +118,19 @@ $sourceConfig = Join-Path $env:TEMP 'careerlens-netlify-sources.json'
 npm.cmd run inspect:official-job-feeds -- --config-file "$sourceConfig"
 ```
 
-This standalone inspection command does not load dotenv, read environment variables, connect to MongoDB, or write data. It reads only the explicitly supplied `.json` file, strips a PowerShell UTF-8 BOM, and reports included listings and any excluded IDs/titles. The Netlify exclusion is intentionally an exact listing-ID rule for the reviewed talent-community posting only; other listings remain included. Review exclusion IDs against the employer's live careers page before relying on them.
+This standalone inspection command does not load dotenv, read environment variables, connect to MongoDB, or write data. It reads only the explicitly supplied `.json` file, strips a PowerShell UTF-8 BOM, and reports included listings and any excluded IDs/titles. The Netlify Greenhouse source is restricted in code to reviewed role IDs `8806100002`, `8861222002`, `8823312002`, and `8859322002`; the talent-community ID `4224129002` and all other IDs are excluded.
+
+Feed sync inserts new listings inactive and does not set source review, employer/college verification, or availability confirmation. To review one of the four staged Netlify roles, configure `JOB_REVIEW_API_TOKEN` and `JOB_REVIEW_API_REVIEWER` in the backend runtime environment. Keep the bearer token secret and limit it to authorized reviewers; the reviewer value is the attribution recorded with each decision. The review route is `POST /api/jobs/review/netlify/<sourceListingId>` and requires all three explicit JSON fields:
+
+```json
+{
+  "decision": "approved",
+  "availability": "available",
+  "publish": false
+}
+```
+
+An authorized reviewer must independently re-check the official careers page and the listing's application page before recording approval and current availability. `publish` must be explicitly `true` to activate that one listing; otherwise it is kept inactive. Rejections or unavailable decisions keep it inactive. These source-page review fields are separate from employer and college-placement-office verification. Public jobs also require a fresh availability confirmation and feed check (both within 24 hours); source-feed presence alone is not approval or a claim that the role is open. The review API is unavailable unless both runtime settings are configured.
 
 The existing `npm run sync:official-jobs -- --dry-run` is **database-connected**: it loads dotenv and reads matching source records, although it does not write records or create indexes. Do not use it for a no-database inspection. Missing-listing deactivation is disabled by default. Set `"deactivateMissingListings": true` for a source only after independently establishing that its feed response is complete and intended as a full snapshot. The adapters validate HTTP success and feed shape but cannot detect every provider-side truncation. During apply, all configured feeds are fetched and validated before record writes; listings are upserted before any opted-in deactivation. A database error during individual upserts can leave partial refreshes, so retry only after reviewing status; default-off deactivation prevents an upsert failure from triggering removals. Opted-in deactivation is not transactional: a database failure during `updateMany` can leave reconciliation partially applied. The apply command requires `JOB_SYNC_ENABLED=true`. Duplicate protection is scoped to provider, configured company, and external listing ID. An empty feed with existing records fails closed unless `allowEmptyResult: true` is added after confirming the employer feed is intentionally empty.
 

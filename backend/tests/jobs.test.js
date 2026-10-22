@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 
 import Job from '../models/job.model.js'
 import { getJobById, getJobs, validateJobListQuery } from '../controllers/jobController.js'
+import { NETLIFY_ALLOWED_LISTING_IDS } from '../utils/netlifyJobPolicy.js'
 
 function createResponse() {
   return {
@@ -145,8 +146,20 @@ test('job listing applies active and unexpired criteria, filters, and pagination
   )
   assert.ok(capturedFilter.$or.some((condition) => condition.expiryDate === null))
   assert.equal(capturedFilter.$or.some((condition) => condition.expiryDate?.$gte instanceof Date), true)
-  assert.deepEqual(capturedFilter.verifiedAt, { $ne: null })
-  assert.deepEqual(capturedFilter.verifiedBy, { $in: ['college_placement_office', 'employer'] })
+  const approvalBranches = capturedFilter.$and[0].$or
+  assert.deepEqual(approvalBranches[0].$and[1].verifiedAt, { $ne: null })
+  assert.deepEqual(approvalBranches[0].$and[1].verifiedBy, { $in: ['college_placement_office', 'employer'] })
+  assert.deepEqual(approvalBranches[0].$and[0].$nor[0], {
+    sourceProvider: 'greenhouse',
+    sourceCompany: /^Netlify$/i,
+  })
+  assert.equal(approvalBranches[1].sourceProvider, 'greenhouse')
+  assert.equal(approvalBranches[1].sourceCompany.source, '^Netlify$')
+  assert.deepEqual(approvalBranches[1].sourceListingId.$in, NETLIFY_ALLOWED_LISTING_IDS)
+  assert.equal(approvalBranches[1].sourceReviewStatus, 'approved')
+  assert.deepEqual(approvalBranches[1].sourceReviewAt, { $ne: null })
+  assert.deepEqual(approvalBranches[1].sourceReviewBy, { $type: 'string', $ne: '' })
+  assert.equal(approvalBranches[1].sourceReviewAvailability, 'available')
   assert.deepEqual(capturedFilter.sourceProvider, { $in: ['greenhouse', 'lever'] })
   assert.deepEqual(capturedFilter.sourceCompany, { $type: 'string', $ne: '' })
   assert.deepEqual(capturedFilter.sourceListingId, { $type: 'string', $ne: '' })
@@ -157,7 +170,7 @@ test('job listing applies active and unexpired criteria, filters, and pagination
   assert.equal(capturedFilter.externalApplicationUrl.test('http://jobs.lever.co/example/1'), false)
   assert.ok(capturedFilter.lastCheckedAt.$gte instanceof Date)
   assert.ok(capturedFilter.lastCheckedAt.$lte instanceof Date)
-  assert.equal(capturedFilter.$and[0].$or[0].title.source, 'C\\+\\+')
+  assert.equal(capturedFilter.$and[1].$or[0].title.source, 'C\\+\\+')
   assert.equal(capturedFilter.location.$options, 'i')
   assert.equal(capturedFilter.experienceLevel.$options, 'i')
   assert.equal(capturedFilter.employmentType.$options, 'i')
@@ -192,6 +205,51 @@ test('job listing excludes inactive and expired records', async () => {
     { ...officialFeedFields('9'), _id: 'active-future-confirmation', isActive: true, availabilityConfirmedAt: new Date(now.getTime() + 60_000), expiryDate: null, verifiedAt: now, verifiedBy: 'employer' },
     { _id: 'active-user-supplied-verification', isActive: true, availabilityConfirmedAt: now, expiryDate: null, verifiedAt: now, verifiedBy: 'employer' },
     { ...officialFeedFields('10', new Date(now.getTime() - 25 * 60 * 60 * 1000)), _id: 'active-stale-feed-check', isActive: true, availabilityConfirmedAt: now, expiryDate: null, verifiedAt: now, verifiedBy: 'employer' },
+    {
+      ...officialFeedFields(NETLIFY_ALLOWED_LISTING_IDS[0]),
+      _id: 'active-reviewed-source',
+      sourceCompany: 'Netlify',
+      isActive: true,
+      availabilityConfirmedAt: now,
+      expiryDate: null,
+      sourceReviewStatus: 'approved',
+      sourceReviewAt: now,
+      sourceReviewBy: 'placement-reviewer',
+      sourceReviewAvailability: 'available',
+    },
+    {
+      ...officialFeedFields(NETLIFY_ALLOWED_LISTING_IDS[1]),
+      _id: 'active-reviewed-stale-availability',
+      sourceCompany: 'Netlify',
+      isActive: true,
+      availabilityConfirmedAt: new Date(now.getTime() - 25 * 60 * 60 * 1000),
+      expiryDate: null,
+      sourceReviewStatus: 'approved',
+      sourceReviewAt: now,
+      sourceReviewBy: 'placement-reviewer',
+      sourceReviewAvailability: 'available',
+    },
+    {
+      ...officialFeedFields(NETLIFY_ALLOWED_LISTING_IDS[2]),
+      _id: 'active-reviewed-without-approval',
+      sourceCompany: 'Netlify',
+      isActive: true,
+      availabilityConfirmedAt: now,
+      expiryDate: null,
+      sourceReviewAt: now,
+      sourceReviewBy: 'placement-reviewer',
+      sourceReviewAvailability: 'available',
+    },
+    {
+      ...officialFeedFields('netlify-old-record'),
+      _id: 'active-netlify-with-other-verification-only',
+      sourceCompany: 'netlify',
+      isActive: true,
+      availabilityConfirmedAt: now,
+      expiryDate: null,
+      verifiedAt: now,
+      verifiedBy: 'employer',
+    },
   ]
   let matchedRecords
   const queryChain = {
@@ -209,26 +267,38 @@ test('job listing excludes inactive and expired records', async () => {
       const allowsNoExpiry = filter.$or.some((condition) => condition.expiryDate === null)
       const confirmationRange = filter.availabilityConfirmedAt
       const feedCheckRange = filter.lastCheckedAt
-      matchedRecords = records.filter((job) => (
-        job.isActive === filter.isActive
-        && job.availabilityConfirmedAt instanceof Date
-        && job.availabilityConfirmedAt >= confirmationRange.$gte
-        && job.availabilityConfirmedAt <= confirmationRange.$lte
-        && filter.sourceProvider.$in.includes(job.sourceProvider)
-        && typeof job.sourceCompany === 'string'
-        && job.sourceCompany.length > 0
-        && typeof job.sourceListingId === 'string'
-        && job.sourceListingId.length > 0
-        && filter.sourceCareersUrl.test(job.sourceCareersUrl)
-        && filter.sourceUrl.test(job.sourceUrl)
-        && filter.externalApplicationUrl.test(job.externalApplicationUrl)
-        && job.lastCheckedAt instanceof Date
-        && job.lastCheckedAt >= feedCheckRange.$gte
-        && job.lastCheckedAt <= feedCheckRange.$lte
-        && job.verifiedAt !== null
-        && filter.verifiedBy.$in.includes(job.verifiedBy)
-        && (job.expiryDate === null ? allowsNoExpiry : job.expiryDate >= expiryMinimum)
-      ))
+      const [manualApproval, sourceReviewApproval] = filter.$and[0].$or
+      matchedRecords = records.filter((job) => {
+        const isNetlifyGreenhouse = job.sourceProvider === sourceReviewApproval.sourceProvider
+          && sourceReviewApproval.sourceCompany.test(job.sourceCompany)
+        const isManualApproval = !isNetlifyGreenhouse
+          && job.verifiedAt instanceof Date
+          && manualApproval.$and[1].verifiedBy.$in.includes(job.verifiedBy)
+        const isSourceReviewApproval = isNetlifyGreenhouse
+          && sourceReviewApproval.sourceListingId.$in.includes(job.sourceListingId)
+          && job.sourceReviewStatus === sourceReviewApproval.sourceReviewStatus
+          && job.sourceReviewAt instanceof Date
+          && typeof job.sourceReviewBy === 'string'
+          && job.sourceReviewBy.length > 0
+          && job.sourceReviewAvailability === sourceReviewApproval.sourceReviewAvailability
+        return job.isActive === filter.isActive
+          && job.availabilityConfirmedAt instanceof Date
+          && job.availabilityConfirmedAt >= confirmationRange.$gte
+          && job.availabilityConfirmedAt <= confirmationRange.$lte
+          && filter.sourceProvider.$in.includes(job.sourceProvider)
+          && typeof job.sourceCompany === 'string'
+          && job.sourceCompany.length > 0
+          && typeof job.sourceListingId === 'string'
+          && job.sourceListingId.length > 0
+          && filter.sourceCareersUrl.test(job.sourceCareersUrl)
+          && filter.sourceUrl.test(job.sourceUrl)
+          && filter.externalApplicationUrl.test(job.externalApplicationUrl)
+          && job.lastCheckedAt instanceof Date
+          && job.lastCheckedAt >= feedCheckRange.$gte
+          && job.lastCheckedAt <= feedCheckRange.$lte
+          && (isManualApproval || isSourceReviewApproval)
+          && (job.expiryDate === null ? allowsNoExpiry : job.expiryDate >= expiryMinimum)
+      })
       return queryChain
     },
     countDocuments: async () => matchedRecords.length,
@@ -239,8 +309,9 @@ test('job listing excludes inactive and expired records', async () => {
     assert.deepEqual(response.body.jobs.map((job) => job._id), [
       'active-no-expiry',
       'active-future-expiry',
+      'active-reviewed-source',
     ])
-    assert.equal(response.body.pagination.totalJobs, 2)
+    assert.equal(response.body.pagination.totalJobs, 3)
   })
 })
 
@@ -281,8 +352,8 @@ test('job lookup returns an active, unexpired job and rejects invalid or missing
   assert.equal(capturedFilter._id, jobId)
   assert.equal(capturedFilter.isActive, true)
   assert.ok(capturedFilter.$or.some((condition) => condition.expiryDate?.$gte instanceof Date))
-  assert.deepEqual(capturedFilter.verifiedAt, { $ne: null })
-  assert.deepEqual(capturedFilter.verifiedBy, { $in: ['college_placement_office', 'employer'] })
+  assert.deepEqual(capturedFilter.$and[0].$or[0].$and[1].verifiedAt, { $ne: null })
+  assert.deepEqual(capturedFilter.$and[0].$or[0].$and[1].verifiedBy, { $in: ['college_placement_office', 'employer'] })
 
   let wasQueried = false
   await withJobStubs({
