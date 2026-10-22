@@ -7,27 +7,22 @@ import JobCard from '../components/jobs/JobCard.jsx'
 const officialCompanyCareers = [
   {
     company: 'Amazon',
-    description: 'Explore roles and apply directly on Amazon’s official careers website.',
     url: 'https://www.amazon.jobs/',
   },
   {
     company: 'Google',
-    description: 'Explore roles and apply directly on Google’s official careers website.',
     url: 'https://www.google.com/about/careers/applications/',
   },
   {
     company: 'Infosys',
-    description: 'Explore roles and apply directly on Infosys’s official careers website.',
     url: 'https://www.infosys.com/careers/',
   },
   {
     company: 'Microsoft',
-    description: 'Search and apply for opportunities directly on Microsoft’s official careers website.',
     url: 'https://jobs.careers.microsoft.com/global/en/search',
   },
   {
     company: 'TCS',
-    description: 'Explore roles and apply directly on TCS’s official careers website.',
     url: 'https://www.tcs.com/careers',
   },
 ]
@@ -93,13 +88,7 @@ function JobsPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState('')
   const [activeView, setActiveView] = useState('recommended')
-  const [filters, setFilters] = useState({
-    keyword: '',
-    location: '',
-    skills: '',
-    experienceLevel: '',
-    employmentType: '',
-  })
+  const [keyword, setKeyword] = useState('')
   const [page, setPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const requestSequence = useRef(0)
@@ -125,11 +114,10 @@ function JobsPage() {
     })
   }, [])
 
-  const fetchBrowseResults = useCallback((searchFilters, nextPage = 1) => {
+  const fetchBrowseResults = useCallback((searchKeyword, nextPage = 1) => {
     const requestId = ++requestSequence.current
-    const params = Object.fromEntries(
-      Object.entries(searchFilters).filter(([, value]) => value.trim()),
-    )
+    const params = {}
+    if (searchKeyword.trim()) params.keyword = searchKeyword.trim()
     params.page = nextPage
     params.limit = 20
     setIsLoading(true)
@@ -158,7 +146,7 @@ function JobsPage() {
 
   const handleRetry = () => {
     if (activeView === 'browse') {
-      fetchBrowseResults(filters, page)
+      fetchBrowseResults(keyword, page)
     } else {
       setIsLoading(true)
       setErrorMessage('')
@@ -175,17 +163,12 @@ function JobsPage() {
 
   const handleBrowseView = () => {
     setActiveView('browse')
-    fetchBrowseResults(filters)
+    fetchBrowseResults(keyword)
   }
 
   const handleSearch = (event) => {
     event.preventDefault()
-    fetchBrowseResults(filters)
-  }
-
-  const handleFilterChange = (event) => {
-    const { name, value } = event.target
-    setFilters((current) => ({ ...current, [name]: value }))
+    fetchBrowseResults(keyword)
   }
 
   const internships = jobs.filter((job) => (
@@ -234,46 +217,25 @@ function JobsPage() {
 
       {activeView === 'browse' && (
         <form className="job-search-panel" onSubmit={handleSearch}>
-          <div className="job-search-fields">
-            <label>
-              Search jobs
-              <input name="keyword" value={filters.keyword} onChange={handleFilterChange} placeholder="Title, company, or keyword" />
-            </label>
-            <label>
-              Location
-              <input name="location" value={filters.location} onChange={handleFilterChange} placeholder="City or remote" />
-            </label>
-            <label>
-              Required skills
-              <input name="skills" value={filters.skills} onChange={handleFilterChange} placeholder="Comma-separated skills" />
-            </label>
-            <label>
-              Experience
-              <input name="experienceLevel" value={filters.experienceLevel} onChange={handleFilterChange} placeholder="e.g. Entry level" />
-            </label>
-            <label>
-              Job type
-              <input name="employmentType" value={filters.employmentType} onChange={handleFilterChange} placeholder="e.g. Full-time" />
-            </label>
-          </div>
-          <div className="job-search-actions">
-            <button className="primary-button small-button" type="submit">Search jobs</button>
+          <label className="job-search-label" htmlFor="job-keyword-search">Search verified listings</label>
+          <div className="job-search-controls">
+            <input
+              id="job-keyword-search"
+              name="keyword"
+              value={keyword}
+              onChange={(event) => setKeyword(event.target.value)}
+              placeholder="Job title, company, or skill"
+            />
+            <button className="primary-button small-button" type="submit">Search</button>
             <button
               className="secondary-button small-button"
               type="button"
               onClick={() => {
-                const clearedFilters = {
-                  keyword: '',
-                  location: '',
-                  skills: '',
-                  experienceLevel: '',
-                  employmentType: '',
-                }
-                setFilters(clearedFilters)
-                fetchBrowseResults(clearedFilters)
+                setKeyword('')
+                fetchBrowseResults('')
               }}
             >
-              Clear filters
+              Clear
             </button>
           </div>
         </form>
@@ -306,13 +268,19 @@ function JobsPage() {
         )}
         {!isLoading && !errorMessage && jobs.length === 0 && (
           activeView === 'browse'
-            ? <div className="empty-state jobs-empty-state"><h3>No active verified jobs match your search</h3><p>Try broadening or clearing your filters, or explore the official employer career pages below.</p></div>
+            ? <div className="empty-state jobs-empty-state">
+              <span className="jobs-empty-mark" aria-hidden="true">—</span>
+              <h3>No active verified jobs match your search</h3>
+              <p>Try another keyword, or explore current openings on the official employer career sites.</p>
+            </div>
             : <div className="empty-state jobs-empty-state">
+              <span className="jobs-empty-mark" aria-hidden="true">—</span>
               <h3>No active verified jobs are available</h3>
               <p>
                 There are no active listings verified by an employer or college placement office right now.
-                Please check back as new opportunities are verified, or explore the official employer career pages below.
+                Check back as new opportunities are verified, or visit an employer career site directly.
               </p>
+              <a className="jobs-empty-link" href="#official-careers-heading">Explore official career sites</a>
             </div>
         )}
         {!isLoading && !errorMessage && jobs.length > 0 && (
@@ -363,30 +331,26 @@ function JobsPage() {
       <section className="official-careers-section" aria-labelledby="official-careers-heading">
         <div className="official-careers-heading">
           <div>
-            <p className="eyebrow">Explore directly with employers</p>
-            <h2 id="official-careers-heading">Official Company Careers</h2>
+            <p className="eyebrow">More opportunities</p>
+            <h2 id="official-careers-heading">Company career sites</h2>
           </div>
-          <p className="official-careers-notice">
-            External website. The link opens in a new tab, and you will leave CareerLens.
-          </p>
+          <p className="official-careers-notice">External sites open in a new tab.</p>
         </div>
-        {officialCompanyCareers.map(({ company, description, url }) => (
-          <article className="official-career-card" key={company}>
-            <div className="official-career-copy">
-              <h3>{company}</h3>
-              <p>{description}</p>
-            </div>
+        <nav className="official-career-links" aria-label="Official company career sites">
+          {officialCompanyCareers.map(({ company, url }) => (
             <a
-              className="primary-button small-button official-career-link"
+              className="official-career-link"
+              key={company}
               href={url}
               target="_blank"
               rel="noopener noreferrer"
+              aria-label={`Visit ${company} official careers page (opens in a new tab)`}
             >
-              Visit Official Careers
-              <span className="visually-hidden"> for {company} (opens in a new tab; leaves CareerLens)</span>
+              {company}
+              <span aria-hidden="true">↗</span>
             </a>
-          </article>
-        ))}
+          ))}
+        </nav>
       </section>
     </JobsLayout>
   )
