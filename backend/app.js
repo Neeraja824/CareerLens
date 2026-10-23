@@ -5,6 +5,7 @@ import authRoutes from './routes/authRoutes.js'
 import jobRoutes from './routes/jobRoutes.js'
 import resumeRoutes from './routes/resumeRoutes.js'
 import studentRoutes from './routes/studentRoutes.js'
+import adminAuthRoutes from './routes/adminAuthRoutes.js'
 
 const app = express()
 const allowedOrigins = [
@@ -40,6 +41,7 @@ app.get('/api/health', (_request, response) => {
 })
 
 app.use('/api/auth', authRoutes)
+app.use('/api/admin/auth', adminAuthRoutes)
 app.use('/api/jobs', jobRoutes)
 app.use('/api/students', studentRoutes)
 app.use('/api/resumes', resumeRoutes)
