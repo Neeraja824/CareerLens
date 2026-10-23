@@ -16,6 +16,7 @@ export function jobReviewAuthMiddleware(
     ? env.JOB_REVIEW_API_TOKEN
     : ''
   const reviewer = configuredReviewer(env)
+
   if (!expectedToken || expectedToken.length > 512 || !reviewer || reviewer.length > 160) {
     return response.status(503).json({
       success: false,
@@ -25,8 +26,9 @@ export function jobReviewAuthMiddleware(
 
   const authorization = request.headers.authorization
   const match = typeof authorization === 'string'
-    ? authorization.match(/^Bearer (.+)$/)
+    ? authorization.match(/^Bearer\s+(.+)$/)
     : null
+
   if (!match) {
     return response.status(401).json({
       success: false,
@@ -36,6 +38,7 @@ export function jobReviewAuthMiddleware(
 
   const suppliedToken = Buffer.from(match[1])
   const configuredToken = Buffer.from(expectedToken)
+
   if (
     suppliedToken.length !== configuredToken.length
     || !timingSafeEqual(suppliedToken, configuredToken)
