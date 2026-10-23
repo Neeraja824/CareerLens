@@ -274,7 +274,8 @@ function JobsPage() {
               <p>Try another keyword, or explore current openings on the official employer career sites.</p>
             </div>
             : <div className="empty-state jobs-empty-state">
-              <span className="jobs-empty-mark" aria-hidden="true">—</span>
+              <span className="jobs-empty-mark" aria-hidden="true">i</span>
+              <p className="jobs-empty-kicker">Verified listings</p>
               <h3>No active verified jobs are available</h3>
               <p>
                 There are no active listings verified by an employer or college placement office right now.
@@ -296,7 +297,7 @@ function JobsPage() {
               className="secondary-button small-button"
               type="button"
               disabled={page <= 1}
-              onClick={() => fetchBrowseResults(filters, page - 1)}
+              onClick={() => fetchBrowseResults(keyword, page - 1)}
             >
               Previous
             </button>
@@ -305,7 +306,7 @@ function JobsPage() {
               className="secondary-button small-button"
               type="button"
               disabled={page >= totalPages}
-              onClick={() => fetchBrowseResults(filters, page + 1)}
+              onClick={() => fetchBrowseResults(keyword, page + 1)}
             >
               Next
             </button>
